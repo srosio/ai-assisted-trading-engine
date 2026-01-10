@@ -10,10 +10,6 @@ import org.hibernate.annotations.Type;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Persistent journal entry for trade analysis.
- * Automatically created for every signal.
- */
 @Entity
 @Table(name = "journal_entries")
 @Data

@@ -11,12 +11,6 @@ import org.springframework.stereotype.Service;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Rule Engine with deterministic, non-negotiable validation.
- * Rules CANNOT be overridden by AI or anyone else.
- *
- * If rules fail, trade is BLOCKED regardless of AI assessment.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -25,38 +19,27 @@ public class RuleEngineService {
     private final TradingConfig tradingConfig;
     private final JournalService journalService;
 
-    /**
-     * Validate setup against all rules
-     */
-    public RuleResult validateSetup(MarketContext context, AiAssessment aiAssessment) {
+    public RuleResult validateSetup(final MarketContext context, final AiAssessment aiAssessment) {
         log.info("Validating setup for {} - Quality: {}", context.getSymbol(), aiAssessment.getSetupQuality());
 
-        RuleResult result = RuleResult.builder()
+        final var result = RuleResult.builder()
                 .passed(true)
                 .build();
 
-        // Rule 1: Setup Quality
         validateSetupQuality(aiAssessment.getSetupQuality(), result);
 
-        // Rule 2: HTF Alignment
         validateHtfAlignment(context, result);
 
-        // Rule 3: Session
         validateSession(context.getSession(), result);
 
-        // Rule 4: Max Trades Per Day
         validateMaxTrades(result);
 
-        // Rule 5: Daily Loss Limit
         validateDailyLoss(result);
 
-        // Rule 6: Open Interest
         validateOpenInterest(context.getOiChangePercent(), result);
 
-        // Rule 7: Volatility
         validateVolatility(context.getVolatility(), result);
 
-        // Build summary
         result.setSummary(buildSummary(result));
 
         log.info("Rule validation complete - Passed: {}, Failed rules: {}",
@@ -65,11 +48,8 @@ public class RuleEngineService {
         return result;
     }
 
-    /**
-     * Rule 1: Setup quality must be allowed
-     */
-    private void validateSetupQuality(String quality, RuleResult result) {
-        boolean allowed = switch (quality) {
+    private void validateSetupQuality(final String quality, final RuleResult result) {
+        final var allowed = switch (quality) {
             case "A" -> tradingConfig.isAllowAQuality();
             case "B" -> tradingConfig.isAllowBQuality();
             case "C" -> tradingConfig.isAllowCQuality();
@@ -83,28 +63,25 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 2: HTF bias must align with direction (if required)
-     */
-    private void validateHtfAlignment(MarketContext context, RuleResult result) {
+    private void validateHtfAlignment(final MarketContext context, final RuleResult result) {
         if (!tradingConfig.isRequireHtfAlignment()) {
             result.addPassedRule("HTF alignment not required");
             return;
         }
 
-        String event = context.getLiquidityEvent().toLowerCase();
-        String htfBias = context.getHtfBias().toLowerCase();
+        final var event = context.getLiquidityEvent().toLowerCase();
+        final var htfBias = context.getHtfBias().toLowerCase();
 
-        boolean isLongEvent = event.contains("long") || event.contains("bullish");
-        boolean isShortEvent = event.contains("short") || event.contains("bearish");
+        final var isLongEvent = event.contains("long") || event.contains("bullish");
+        final var isShortEvent = event.contains("short") || event.contains("bearish");
 
-        boolean aligned = false;
+        var aligned = false;
         if (isLongEvent && htfBias.equals("bullish")) {
             aligned = true;
         } else if (isShortEvent && htfBias.equals("bearish")) {
             aligned = true;
         } else if (htfBias.equals("neutral")) {
-            aligned = true; // Neutral allows both directions
+            aligned = true;
         }
 
         if (aligned) {
@@ -114,16 +91,13 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 3: Session must be enabled
-     */
-    private void validateSession(String session, RuleResult result) {
+    private void validateSession(final String session, final RuleResult result) {
         if (session == null) {
             result.addFailedRule("Session not specified");
             return;
         }
 
-        boolean allowed = switch (session.toUpperCase()) {
+        final var allowed = switch (session.toUpperCase()) {
             case "LONDON" -> tradingConfig.isLondonSessionEnabled();
             case "NY", "NEW_YORK" -> tradingConfig.isNySessionEnabled();
             case "ASIA" -> tradingConfig.isAsiaSessionEnabled();
@@ -137,11 +111,8 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 4: Max trades per day not exceeded
-     */
-    private void validateMaxTrades(RuleResult result) {
-        long todayCount = journalService.getTodayTradeCount();
+    private void validateMaxTrades(final RuleResult result) {
+        final var todayCount = journalService.getTodayTradeCount();
 
         if (todayCount < tradingConfig.getMaxTradesPerDay()) {
             result.addPassedRule(String.format("Trades today (%d) below max (%d)",
@@ -152,13 +123,8 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 5: Daily loss limit not exceeded
-     */
-    private void validateDailyLoss(RuleResult result) {
-        // This would check actual P&L from journal
-        // For now, simplified check
-        boolean withinLimit = journalService.isDailyLossWithinLimit();
+    private void validateDailyLoss(final RuleResult result) {
+        final var withinLimit = journalService.isDailyLossWithinLimit();
 
         if (withinLimit) {
             result.addPassedRule("Daily loss within limit");
@@ -167,10 +133,7 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 6: Minimum Open Interest change
-     */
-    private void validateOpenInterest(Double oiChange, RuleResult result) {
+    private void validateOpenInterest(final Double oiChange, final RuleResult result) {
         if (oiChange == null) {
             result.addFailedRule("Open Interest data unavailable");
             return;
@@ -184,10 +147,7 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Rule 7: Volatility within acceptable range
-     */
-    private void validateVolatility(String volatility, RuleResult result) {
+    private void validateVolatility(final String volatility, final RuleResult result) {
         if (volatility == null || volatility.equals("unknown")) {
             result.addFailedRule("Volatility state unknown");
             return;
@@ -200,10 +160,7 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Build human-readable summary
-     */
-    private String buildSummary(RuleResult result) {
+    private String buildSummary(final RuleResult result) {
         if (result.isPassed()) {
             return String.format("All %d rules passed. Setup is valid for consideration.",
                     result.getPassedRules().size());
@@ -214,24 +171,18 @@ public class RuleEngineService {
         }
     }
 
-    /**
-     * Quick check if basic rules are likely to pass (for early filtering)
-     */
-    public boolean quickValidation(String session) {
-        // Check session
-        boolean sessionOk = switch (session.toUpperCase()) {
+    public boolean quickValidation(final String session) {
+        final var sessionOk = switch (session.toUpperCase()) {
             case "LONDON" -> tradingConfig.isLondonSessionEnabled();
             case "NY", "NEW_YORK" -> tradingConfig.isNySessionEnabled();
             case "ASIA" -> tradingConfig.isAsiaSessionEnabled();
             default -> false;
         };
 
-        // Check max trades
-        long todayCount = journalService.getTodayTradeCount();
-        boolean tradesOk = todayCount < tradingConfig.getMaxTradesPerDay();
+        final var todayCount = journalService.getTodayTradeCount();
+        final var tradesOk = todayCount < tradingConfig.getMaxTradesPerDay();
 
-        // Check daily loss
-        boolean lossOk = journalService.isDailyLossWithinLimit();
+        final var lossOk = journalService.isDailyLossWithinLimit();
 
         return sessionOk && tradesOk && lossOk;
     }

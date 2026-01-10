@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * AI's constrained analysis of market context.
- * AI does NOT make trading decisions - only assesses quality and identifies risks.
- */
 @Data
 @Builder
 @NoArgsConstructor

@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/**
- * Structured, factual snapshot of market conditions.
- * Contains ONLY objective data, no opinions or predictions.
- */
 @Data
 @Builder
 @NoArgsConstructor

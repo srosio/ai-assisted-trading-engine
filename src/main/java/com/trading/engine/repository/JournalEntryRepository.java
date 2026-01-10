@@ -9,9 +9,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Repository for journal entry persistence.
- */
 @Repository
 public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long> {
 

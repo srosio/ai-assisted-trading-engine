@@ -10,10 +10,6 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-/**
- * Notification service for Telegram alerts.
- * Sends formatted trade signal notifications to trader.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -21,27 +17,20 @@ public class NotificationService extends TelegramLongPollingBot {
 
     private final TelegramConfig telegramConfig;
 
-    /**
-     * Send trade signal notification
-     */
-    public void sendSignalNotification(TradeSignal signal) {
+    public void sendSignalNotification(final TradeSignal signal) {
         if (!telegramConfig.getEnabled()) {
             log.debug("Telegram notifications disabled");
             return;
         }
 
-        String message = formatSignalMessage(signal);
+        final var message = formatSignalMessage(signal);
         sendMessage(message);
     }
 
-    /**
-     * Format signal as readable message
-     */
-    private String formatSignalMessage(TradeSignal signal) {
-        StringBuilder sb = new StringBuilder();
+    private String formatSignalMessage(final TradeSignal signal) {
+        final var sb = new StringBuilder();
 
-        // Header with emoji
-        String emoji = signal.getStatus().equals("VALID") ? "✅" : "❌";
+        final var emoji = signal.getStatus().equals("VALID") ? "✅" : "❌";
         sb.append(emoji).append(" **TRADE SIGNAL**\n\n");
 
         // Basic info
@@ -88,29 +77,26 @@ public class NotificationService extends TelegramLongPollingBot {
         return sb.toString();
     }
 
-    /**
-     * Send message with retry logic
-     */
-    private void sendMessage(String text) {
-        SendMessage message = new SendMessage();
+    private void sendMessage(final String text) {
+        final var message = new SendMessage();
         message.setChatId(telegramConfig.getChatId());
         message.setText(text);
         message.setParseMode("Markdown");
 
-        int attempts = 0;
+        var attempts = 0;
         while (attempts < telegramConfig.getRetryAttempts()) {
             try {
                 execute(message);
                 log.info("Telegram notification sent successfully");
                 return;
-            } catch (TelegramApiException e) {
+            } catch (final TelegramApiException e) {
                 attempts++;
                 log.error("Failed to send Telegram notification (attempt {}): {}",
                         attempts, e.getMessage());
                 if (attempts < telegramConfig.getRetryAttempts()) {
                     try {
-                        Thread.sleep(1000 * attempts); // Exponential backoff
-                    } catch (InterruptedException ie) {
+                        Thread.sleep(1000 * attempts);
+                    } catch (final InterruptedException ie) {
                         Thread.currentThread().interrupt();
                     }
                 }
@@ -118,10 +104,7 @@ public class NotificationService extends TelegramLongPollingBot {
         }
     }
 
-    /**
-     * Send simple text notification
-     */
-    public void sendAlert(String message) {
+    public void sendAlert(final String message) {
         if (!telegramConfig.getEnabled()) {
             return;
         }
@@ -139,8 +122,6 @@ public class NotificationService extends TelegramLongPollingBot {
     }
 
     @Override
-    public void onUpdateReceived(Update update) {
-        // Not implementing bot commands for now
-        // This is a notification-only bot
+    public void onUpdateReceived(final Update update) {
     }
 }

@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Result of rule engine validation.
- * Rules are deterministic and non-negotiable.
- */
 @Data
 @Builder
 @NoArgsConstructor

@@ -4,10 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Configuration for Claude API integration.
- * Claude is used ONLY for constrained market analysis.
- */
 @Configuration
 @ConfigurationProperties(prefix = "claude")
 @Data
@@ -21,13 +17,10 @@ public class ClaudeConfig {
 
     private Integer maxTokens = 1024;
 
-    private Double temperature = 0.3; // Lower temperature for consistent, factual analysis
+    private Double temperature = 0.3;
 
     private Integer timeoutSeconds = 30;
 
-    /**
-     * The strict prompt template that constrains Claude's role.
-     */
     public static final String ANALYSIS_PROMPT_TEMPLATE = """
             You are a professional crypto market analyst.
             You do NOT give trading advice.

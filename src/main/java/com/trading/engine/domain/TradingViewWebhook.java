@@ -10,10 +10,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/**
- * Incoming webhook payload from TradingView.
- * Represents objective market events detected by Pine Script.
- */
 @Data
 @Builder
 @NoArgsConstructor

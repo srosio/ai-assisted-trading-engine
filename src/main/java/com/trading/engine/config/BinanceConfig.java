@@ -6,10 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 
-/**
- * Configuration for Binance Futures API integration.
- * Used for real-time market data retrieval.
- */
 @Configuration
 @ConfigurationProperties(prefix = "binance")
 @Data
