@@ -32,20 +32,69 @@ All trades must pass:
 
 ```
 TradingView (Pine Script)
-        ↓ Webhook
-Spring Boot API
+  - Liquidity sweep / Structure break / Session interactions
+  - Sends webhook (event only)
         ↓
-Market Data Service (Binance)
+Spring Boot API (Ingress Layer)
+  - Payload validation
+  - Time alignment (exchange time/UTC)
+  - Session tagging (Asia/London/NY)
+  - Event deduplication (5min window)
         ↓
-Context Builder (Factual snapshot)
+Market Data Aggregation Layer (Binance)
+  - Funding rate (current + delta)
+  - Open interest (absolute + change %)
+  - Volume (24h)
+  - Taker buy/sell ratio
+  - Liquidations (recent)
+  - Order book imbalance (bid/ask)
         ↓
-Spring AI + Claude Analysis (Constrained)
+Intraday Context Engine (Deterministic)
+  - Trend bias per timeframe (15m/5m/1m)
+  - OI + price classification (buildup/squeeze)
+  - Volume confirmation/divergence
+  - Session narrative (expansion/reversion/continuation)
+  - Confidence score (0-100)
+        ↓ (confidence >= threshold)
+AI Trade Analysis (Spring AI + Claude)
+  Inputs:
+    - Event type + price location
+    - Session context + HTF bias
+    - Funding + OI + volume states
+    - Intraday confidence + bias
+  Outputs:
+    - Setup quality (A/B/C)
+    - Execution model (market/limit/scale-in)
+    - Entry zone (price range)
+    - Stop placement logic + suggested price
+    - Targets with R multiples
+    - Invalidation conditions
+    - Risk notes
         ↓
-Rule Engine (Hard validation)
+Rule Engine (Hard Validation)
+  - Quality threshold
+  - HTF alignment
+  - Session validation
+  - Daily loss limits
+        ↓
+Execution Advisory Layer
+  - Spread check
+  - Funding acceptability
+  - Volatility bounds
+  - Liquidity adequacy
+  - Overall readiness
         ↓
 Telegram Notification + Journal
+  - Intraday context
+  - Execution plan
+  - Pre-execution checklist
+  - All inputs logged
         ↓
-Human Trader Decides (Entry, Size, Stop, Target)
+Human Intraday Trader
+  - Reviews execution plan
+  - Checks pre-execution checklist
+  - Executes (or overrides if needed)
+  - Logs actual entry/exit manually
 ```
 
 ## Tech Stack
@@ -115,17 +164,23 @@ src/main/java/com/trading/engine/
 ├── controller/
 │   └── WebhookController.java          # Webhook endpoint
 ├── service/
-│   ├── MarketDataService.java          # Binance market data
-│   ├── ContextBuilderService.java      # Build factual context
-│   ├── AiAnalysisService.java          # Claude AI (constrained)
+│   ├── IngressService.java             # Time alignment, deduplication
+│   ├── MarketDataService.java          # Binance comprehensive data
+│   ├── IntradayContextEngine.java      # Deterministic analysis
+│   ├── ContextBuilderService.java      # Build market context
+│   ├── AiAnalysisService.java          # Claude AI (assessment + execution plan)
 │   ├── RuleEngineService.java          # Hard validation rules
+│   ├── ExecutionAdvisoryService.java   # Pre-execution checklist
 │   ├── NotificationService.java        # Telegram alerts
 │   ├── JournalService.java             # Trade logging
 │   └── SignalProcessingService.java    # Main orchestration
 ├── domain/
 │   ├── TradingViewWebhook.java         # Webhook payload
-│   ├── MarketContext.java              # Market snapshot
-│   ├── AiAssessment.java               # AI analysis result
+│   ├── MarketContext.java              # Market data snapshot
+│   ├── IntradayContext.java            # Intraday deterministic analysis
+│   ├── AiAssessment.java               # AI quality assessment
+│   ├── ExecutionPlan.java              # AI execution plan
+│   ├── ExecutionChecklist.java         # Pre-execution readiness
 │   ├── RuleResult.java                 # Validation result
 │   ├── TradeSignal.java                # Complete signal
 │   └── JournalEntry.java               # Persistent record
@@ -327,19 +382,22 @@ trading:
 
 When a webhook is received:
 
-1. **Authentication** - Validate API key from X-API-Key header or apiKey parameter
-2. **Context Building** - Fetch real-time data from Binance (price, OI, funding rate, volatility)
-3. **AI Analysis** - Send context to Claude via Spring AI with strict constraints (quality rating, risks, invalidation)
-4. **Rule Validation** - Check all hard rules (quality, HTF alignment, session, daily loss limits)
-5. **Signal Decision** - Determine if trade should be taken (YES/NO)
-6. **Journal Entry** - Automatically log everything to database
-7. **Telegram Notification** - Send formatted alert to trader (ONLY for confirmed/VALID trades)
-8. **Human Decision** - Trader manually decides entry price, position size, stop loss, and take profit
+1. **Ingress Layer** - Validate payload, align time to UTC, tag session, check for duplicates (5min window)
+2. **Market Data Aggregation** - Fetch comprehensive data: price, funding + delta, OI + change, volume, taker ratio, liquidations, order book
+3. **Intraday Context Engine** - Deterministic analysis: trend bias (15m/5m/1m), OI+price behavior, volume confirmation, session narrative, confidence score (0-100)
+4. **Confidence Threshold Check** - Require minimum 60/100 confidence to proceed (configurable)
+5. **AI Setup Assessment** - Analyze quality (A/B/C), alignment score, risk factors, key observations
+6. **Rule Validation** - Check HTF alignment, session rules, quality thresholds, daily loss limits
+7. **AI Execution Planning** - Generate execution model, entry zone, stop logic, targets with R multiples, invalidation conditions
+8. **Execution Advisory** - Pre-execution checklist: spread OK, funding acceptable, volatility within bounds, liquidity adequate
+9. **Journal Entry** - Log all inputs, context, analysis, execution plan
+10. **Telegram Notification** - Send comprehensive alert (ONLY for VALID trades that pass all checks)
+11. **Human Execution** - Trader reviews plan, verifies checklist, executes trade manually
 
 ## Telegram Notification Format
 
 ```
-✅ TRADE SIGNAL
+✅ INTRADAY TRADE SIGNAL
 
 Symbol: BTCUSDT
 Direction: LONG
@@ -347,25 +405,39 @@ Event: liquidity_sweep_long
 Session: NY
 Price: 43120.50
 
-AI Quality: A
+Intraday Analysis:
+Context: long buildup setup with range expansion pattern. Volume: confirmed. Confidence: 85/100
+Trend 15m/5m/1m: bullish/bullish/neutral
+OI+Price: long_buildup
+Volume: confirmed
+Confidence: 85/100
+
+AI Assessment:
+Quality: A
 Alignment: 85/100
 Key Risk: HTF resistance nearby
 
-Market Data:
-HTF Bias: bullish
-Volatility: 1.8
-OI Change: 3.45%
+Execution Plan:
+Model: limit
+Entry Zone: 43050 - 43120
+Stop: below swept low @ 42900
+Targets:
+  - 43780 (3.0R): First HTF resistance
+  - 44200 (5.0R): Fibonacci extension
 
-Rule Check: ✅ PASS
+Pre-Execution Checklist:
+✅ All checks passed - Ready for execution
 
-Action: Trade confirmed - Human decides entry, position size, and risk management
+Action: Execute per plan: limit - Review checklist before entry
 
-Invalidation: Break below swept low
+Invalidation:
+• Break below swept low (42900)
+• Funding rate exceeds 0.1%
 
 Summary: Strong liquidity sweep with HTF alignment and volume confirmation
 ```
 
-**Note:** System only provides YES/NO decision. Trader manually calculates entry, stop, target, and position size based on their risk management rules.
+**Note:** System provides full execution plan with entry zone, stop logic, and targets. Human trader verifies checklist and executes manually.
 
 ## Database Schema
 

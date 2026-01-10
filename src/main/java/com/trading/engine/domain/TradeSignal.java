@@ -24,13 +24,19 @@ public class TradeSignal {
 
     private MarketContext marketContext;
 
+    private IntradayContext intradayContext;
+
     private AiAssessment aiAssessment;
 
+    private ExecutionPlan executionPlan;
+
     private RuleResult ruleResult;
+
+    private ExecutionChecklist executionChecklist;
 
     private LocalDateTime timestamp;
 
     private String status; // VALID, INVALID, EXPIRED
 
-    private String action; // Human decides entry and risk management
+    private String action; // Human executes per execution plan
 }

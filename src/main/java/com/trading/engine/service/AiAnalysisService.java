@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.trading.engine.config.ClaudeConfig;
 import com.trading.engine.domain.AiAssessment;
+import com.trading.engine.domain.ExecutionPlan;
+import com.trading.engine.domain.IntradayContext;
 import com.trading.engine.domain.MarketContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -118,6 +120,103 @@ public class AiAnalysisService {
                 .summary("AI analysis failed. This setup requires manual review before consideration.")
                 .alignmentScore(30)
                 .keyObservation("System error - do not trade without manual confirmation")
+                .build();
+    }
+
+    /**
+     * Generate execution plan using AI based on market context and intraday analysis
+     */
+    public ExecutionPlan generateExecutionPlan(final MarketContext context,
+                                                final IntradayContext intradayContext,
+                                                final String direction) {
+        log.info("Generating execution plan for {} - Direction: {}", context.getSymbol(), direction);
+
+        try {
+            // Build comprehensive context JSON
+            final var contextData = objectMapper.createObjectNode();
+            contextData.put("symbol", context.getSymbol());
+            contextData.put("event", context.getLiquidityEvent());
+            contextData.put("direction", direction);
+            contextData.put("currentPrice", context.getCurrentPrice());
+            contextData.put("session", context.getSession());
+            contextData.put("htfBias", context.getHtfBias());
+            contextData.put("oiChangePercent", context.getOiChangePercent());
+            contextData.put("fundingRate", context.getFundingRate());
+            contextData.put("volatility", context.getVolatility());
+
+            // Add intraday context
+            contextData.put("trendBias15m", intradayContext.getTrendBias15m());
+            contextData.put("trendBias5m", intradayContext.getTrendBias5m());
+            contextData.put("oiPriceBehavior", intradayContext.getOiPriceBehavior());
+            contextData.put("volumeConfirmation", intradayContext.getVolumeConfirmation());
+            contextData.put("sessionNarrative", intradayContext.getSessionNarrative());
+            contextData.put("confidenceScore", intradayContext.getConfidenceScore());
+            contextData.put("fundingDelta", intradayContext.getFundingRateDelta());
+            contextData.put("orderBookImbalance", intradayContext.getOrderBookImbalance());
+
+            final var contextJson = objectMapper.writeValueAsString(contextData);
+
+            final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
+
+            final var userMessage = String.format("""
+                    You are a professional intraday crypto trade execution planner.
+
+                    Your role:
+                    1. Design an execution plan (market/limit/scale-in)
+                    2. Define entry zone (price range)
+                    3. Provide stop logic and suggested price
+                    4. Define targets with R multiples
+                    5. List invalidation conditions
+                    6. Note risk factors (funding extremes, news, etc.)
+
+                    DO NOT make the trade decision (already made).
+                    DO NOT suggest position size.
+
+                    Market and intraday context:
+                    %s
+
+                    Generate a structured execution plan following the required format.
+
+                    %s
+                    """, contextJson, outputConverter.getFormat());
+
+            final var response = chatClient.prompt()
+                    .user(userMessage)
+                    .call()
+                    .content();
+
+            final var executionPlan = outputConverter.convert(response);
+
+            log.info("Execution plan generated - Model: {}, Targets: {}",
+                    executionPlan.getExecutionModel(),
+                    executionPlan.getTargets() != null ? executionPlan.getTargets().size() : 0);
+
+            return executionPlan;
+
+        } catch (final Exception e) {
+            log.error("Error generating execution plan: {}", e.getMessage(), e);
+            return createFallbackExecutionPlan(context, direction);
+        }
+    }
+
+    /**
+     * Create fallback execution plan when AI fails
+     */
+    private ExecutionPlan createFallbackExecutionPlan(final MarketContext context, final String direction) {
+        log.warn("Creating fallback execution plan");
+
+        final var currentPrice = context.getCurrentPrice();
+
+        return ExecutionPlan.builder()
+                .executionModel("manual")
+                .entryZoneLow(currentPrice)
+                .entryZoneHigh(currentPrice)
+                .stopLogic("Manual - AI unavailable")
+                .suggestedStopPrice(currentPrice)
+                .targets(List.of())
+                .invalidationConditions(List.of("Manual review required - AI system unavailable"))
+                .riskNotes(List.of("AI execution plan unavailable", "Human trader must plan manually"))
+                .executionNotes("Fallback plan - manual execution required")
                 .build();
     }
 

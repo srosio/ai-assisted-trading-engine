@@ -1,6 +1,7 @@
 package com.trading.engine.controller;
 
 import com.trading.engine.domain.TradingViewWebhook;
+import com.trading.engine.service.IngressService;
 import com.trading.engine.service.SignalProcessingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.Map;
 @Slf4j
 public class WebhookController {
 
+    private final IngressService ingressService;
     private final SignalProcessingService signalProcessor;
 
     @PostMapping("/tradingview")
@@ -27,7 +29,31 @@ public class WebhookController {
                 webhook.getSymbol(), webhook.getEvent(), webhook.getSession());
 
         try {
-            // Process webhook through pipeline
+            // Step 1: Ingress Layer - Validate payload
+            if (!ingressService.isValidPayload(webhook)) {
+                final var errorResponse = Map.of(
+                        "success", false,
+                        "error", "Invalid payload: missing required fields"
+                );
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
+
+            // Step 2: Event deduplication
+            if (ingressService.isDuplicate(webhook)) {
+                log.info("Duplicate event ignored - skipping processing");
+                final var response = Map.of(
+                        "success", true,
+                        "status", "DUPLICATE",
+                        "message", "Event already processed within deduplication window"
+                );
+                return ResponseEntity.ok(response);
+            }
+
+            // Step 3: Time alignment and session tagging
+            final var alignedSession = ingressService.processIngress(webhook);
+            webhook.setSession(alignedSession); // Override with exchange-aligned session
+
+            // Step 4: Process webhook through pipeline
             final var signal = signalProcessor.processWebhook(webhook);
 
             // Build response

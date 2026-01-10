@@ -26,10 +26,25 @@ public class MockNotificationService extends TelegramLongPollingBot {
         log.info("[MOCK TELEGRAM] Alignment: {}/100", signal.getAiAssessment().getAlignmentScore());
         log.info("[MOCK TELEGRAM] Rule Check: {}", signal.getRuleResult().isPassed() ? "PASS" : "FAIL");
         log.info("[MOCK TELEGRAM] Status: {}", signal.getStatus());
-        log.info("[MOCK TELEGRAM] Action: {}", signal.getAction());
         log.info("[MOCK TELEGRAM] Price: {}", signal.getMarketContext().getCurrentPrice());
-        log.info("[MOCK TELEGRAM] HTF Bias: {}", signal.getMarketContext().getHtfBias());
-        log.info("[MOCK TELEGRAM] Volatility: {}", signal.getMarketContext().getVolatility());
+
+        if (signal.getIntradayContext() != null) {
+            log.info("[MOCK TELEGRAM] Intraday: {}", signal.getIntradayContext().getContextSummary());
+            log.info("[MOCK TELEGRAM] Confidence: {}/100", signal.getIntradayContext().getConfidenceScore());
+        }
+
+        if (signal.getExecutionPlan() != null) {
+            log.info("[MOCK TELEGRAM] Execution Model: {}", signal.getExecutionPlan().getExecutionModel());
+            log.info("[MOCK TELEGRAM] Entry Zone: {} - {}",
+                    signal.getExecutionPlan().getEntryZoneLow(),
+                    signal.getExecutionPlan().getEntryZoneHigh());
+        }
+
+        if (signal.getExecutionChecklist() != null) {
+            log.info("[MOCK TELEGRAM] Checklist: {}", signal.getExecutionChecklist().getChecklistSummary());
+        }
+
+        log.info("[MOCK TELEGRAM] Action: {}", signal.getAction());
         log.info("[MOCK TELEGRAM] Summary: {}", signal.getAiAssessment().getSummary());
         log.info("[MOCK TELEGRAM] ========================================");
     }
