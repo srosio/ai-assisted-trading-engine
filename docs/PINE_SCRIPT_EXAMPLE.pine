@@ -1,4 +1,4 @@
-//@version=5
+//@version=6
 indicator("Liquidity Sweep Detector", overlay=true)
 
 // Example Pine Script for detecting liquidity sweeps and sending webhooks
@@ -40,14 +40,14 @@ isNY = hour >= 9 and hour < 16 // NY session (EST)
 isLondon = hour >= 3 and hour < 11 // London session (EST)
 currentSession = isNY ? "NY" : isLondon ? "LONDON" : "ASIA"
 
-// Webhook alerts
+// Webhook alerts with camelCase JSON
 if liquiditySweepLong and (isNY or isLondon)
-    alert(str.format('{"symbol": "%s", "timeframe": "%s", "event": "liquidity_sweep_long", "session": "%s", "price": %f, "previous_day_high": %f, "previous_day_low": %f, "volume_spike": true, "displacement_detected": true, "htf_bias": "%s"}',
+    alert(str.format('{"symbol": "%s", "timeframe": "%s", "event": "liquidity_sweep_long", "session": "%s", "price": %f, "previousDayHigh": %f, "previousDayLow": %f, "volumeSpike": true, "displacementDetected": true, "htfBias": "%s"}',
           syminfo.ticker, timeframe.period, currentSession, close, pdHigh, pdLow, htfBias),
           alert.freq_once_per_bar)
 
 if liquiditySweepShort and (isNY or isLondon)
-    alert(str.format('{"symbol": "%s", "timeframe": "%s", "event": "liquidity_sweep_short", "session": "%s", "price": %f, "previous_day_high": %f, "previous_day_low": %f, "volume_spike": true, "displacement_detected": true, "htf_bias": "%s"}',
+    alert(str.format('{"symbol": "%s", "timeframe": "%s", "event": "liquidity_sweep_short", "session": "%s", "price": %f, "previousDayHigh": %f, "previousDayLow": %f, "volumeSpike": true, "displacementDetected": true, "htfBias": "%s"}',
           syminfo.ticker, timeframe.period, currentSession, close, pdHigh, pdLow, htfBias),
           alert.freq_once_per_bar)
 

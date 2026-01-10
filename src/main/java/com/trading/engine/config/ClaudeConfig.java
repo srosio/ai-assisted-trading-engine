@@ -4,10 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Configuration for Claude API integration.
- * Claude is used ONLY for constrained market analysis.
- */
 @Configuration
 @ConfigurationProperties(prefix = "claude")
 @Data
@@ -25,9 +21,6 @@ public class ClaudeConfig {
 
     private Integer timeoutSeconds = 30;
 
-    /**
-     * The strict prompt template that constrains Claude's role.
-     */
     public static final String ANALYSIS_PROMPT_TEMPLATE = """
             You are a professional crypto market analyst.
             You do NOT give trading advice.
@@ -47,12 +40,12 @@ public class ClaudeConfig {
 
             Expected JSON response format:
             {
-              "setup_quality": "A|B|C",
-              "risk_factors": ["factor1", "factor2"],
+              "setupQuality": "A|B|C",
+              "riskFactors": ["factor1", "factor2"],
               "invalidation": "description",
               "summary": "brief factual summary",
-              "alignment_score": 0-100,
-              "key_observation": "most important thing to watch"
+              "alignmentScore": 0-100,
+              "keyObservation": "most important thing to watch"
             }
             """;
 }

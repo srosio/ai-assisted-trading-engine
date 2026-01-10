@@ -49,6 +49,11 @@ server:
   compression:
     enabled: true
 
+# Webhook API Security
+webhook:
+  api:
+    key: ${WEBHOOK_API_KEY:your-secret-api-key-here}
+
 logging:
   level:
     root: INFO

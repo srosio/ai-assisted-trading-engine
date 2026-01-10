@@ -22,6 +22,8 @@ configurations {
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+    maven { url 'https://repo.spring.io/snapshot' }
 }
 
 dependencies {
@@ -32,6 +34,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // Spring AI
+    implementation platform('org.springframework.ai:spring-ai-bom:1.0.0-M4')
+    implementation 'org.springframework.ai:spring-ai-anthropic'
 
     // Database
     runtimeOnly 'org.postgresql:postgresql'
