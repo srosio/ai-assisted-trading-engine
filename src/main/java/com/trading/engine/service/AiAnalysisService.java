@@ -8,6 +8,8 @@ import com.trading.engine.domain.MarketContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -25,11 +27,14 @@ public class AiAnalysisService {
         log.info("Requesting AI analysis for {} - Event: {}", context.getSymbol(), context.getLiquidityEvent());
 
         try {
-            // Build the constrained prompt
+            // Build the constrained prompt - no curly braces to avoid template parsing
             final var contextJson = objectMapper.writeValueAsString(context);
 
-            // Build prompt with plain text concatenation to avoid Spring AI template parsing
-            final var promptText = """
+            // BeanOutputConverter automatically adds format instructions
+            final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
+
+            // Build user message without JSON format example (let BeanOutputConverter handle it)
+            final var userMessage = String.format("""
                     You are a professional crypto market analyst.
                     You do NOT give trading advice.
                     You do NOT make buy/sell decisions.
@@ -41,29 +46,21 @@ public class AiAnalysisService {
                     3. Classifying setup quality (A, B, or C)
 
                     Given the structured market context below, provide your analysis.
-                    Respond in strict JSON format only.
 
                     Market context:
-                    """ + contextJson + """
+                    %s
 
+                    %s
+                    """, contextJson, outputConverter.getFormat());
 
-                    Expected JSON response format:
-                    {
-                      "setupQuality": "A|B|C",
-                      "riskFactors": ["factor1", "factor2"],
-                      "invalidation": "description",
-                      "summary": "brief factual summary",
-                      "alignmentScore": 0-100,
-                      "keyObservation": "most important thing to watch"
-                    }
-                    """;
-
-            // Call Claude API using Spring AI ChatClient with system message
-            final var assessment = chatClient.prompt()
-                    .system("You are a professional crypto market analyst. Respond ONLY with valid JSON.")
-                    .user(promptText)
+            // Call Claude API using Spring AI ChatClient
+            final var response = chatClient.prompt()
+                    .user(userMessage)
                     .call()
-                    .entity(AiAssessment.class);
+                    .content();
+
+            // Parse response using the converter
+            final var assessment = outputConverter.convert(response);
 
             validateAssessment(assessment);
 
