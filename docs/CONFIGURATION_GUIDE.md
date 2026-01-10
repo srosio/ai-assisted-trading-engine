@@ -111,12 +111,12 @@ trading:
 ```
 
 **Explanation:**
-- **Risk per trade:** 0.5% - 1.0% of account
-- **R:R ratio:** Minimum 1:3 (risk 1 to make 3)
-- **Daily loss limit:** -2R maximum (stops trading after -2R loss)
+- **Risk per trade:** 0.5% - 1.0% of account (guideline for human trader)
+- **R:R ratio:** Minimum 1:3 (guideline for human trader)
+- **Daily loss limit:** -2R maximum (enforced by system - stops sending notifications after -2R loss)
 - **No trade limit:** Take as many quality setups as appear
 
-**These cannot be overridden by AI or manual intervention.**
+**Note:** System only enforces daily loss limit. Risk percentages and R:R ratios are guidelines for the human trader to follow when manually sizing positions.
 
 ---
 
@@ -130,7 +130,7 @@ trading:
 **Environment Variable:**
 - `ACCOUNT_BALANCE` - Your trading account size
 
-Used for position sizing calculations.
+Used for daily loss limit calculations (e.g., -2R based on account balance). The system does NOT calculate position sizes - human trader manually decides entry, stop, target, and size for each trade.
 
 ---
 

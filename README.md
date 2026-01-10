@@ -21,10 +21,12 @@ A professional, rule-based crypto trading system that uses AI **only** for marke
 ### Non-Negotiable Rules
 All trades must pass:
 1. **Structural rules** (HTF alignment, session validation)
-2. **Risk rules** (0.5-1% risk, min 3:1 R:R)
+2. **Risk rules** (daily loss limits, quality thresholds)
 3. **Session rules** (London/NY only by default)
 
 **If rules fail, the trade is blocked even if AI analysis is positive.**
+
+**Note:** System only decides YES/NO on taking the trade. Human trader manually manages all risk parameters (entry, stop, target, position size).
 
 ## Architecture
 
@@ -41,9 +43,9 @@ Spring AI + Claude Analysis (Constrained)
         ↓
 Rule Engine (Hard validation)
         ↓
-Risk Engine (Position sizing)
-        ↓
 Telegram Notification + Journal
+        ↓
+Human Trader Decides (Entry, Size, Stop, Target)
 ```
 
 ## Tech Stack
@@ -117,7 +119,6 @@ src/main/java/com/trading/engine/
 │   ├── ContextBuilderService.java      # Build factual context
 │   ├── AiAnalysisService.java          # Claude AI (constrained)
 │   ├── RuleEngineService.java          # Hard validation rules
-│   ├── RiskEngineService.java          # Position sizing & limits
 │   ├── NotificationService.java        # Telegram alerts
 │   ├── JournalService.java             # Trade logging
 │   └── SignalProcessingService.java    # Main orchestration
@@ -126,7 +127,6 @@ src/main/java/com/trading/engine/
 │   ├── MarketContext.java              # Market snapshot
 │   ├── AiAssessment.java               # AI analysis result
 │   ├── RuleResult.java                 # Validation result
-│   ├── RiskCalculation.java            # Risk parameters
 │   ├── TradeSignal.java                # Complete signal
 │   └── JournalEntry.java               # Persistent record
 ├── config/
@@ -330,11 +330,11 @@ When a webhook is received:
 1. **Authentication** - Validate API key from X-API-Key header or apiKey parameter
 2. **Context Building** - Fetch real-time data from Binance (price, OI, funding rate, volatility)
 3. **AI Analysis** - Send context to Claude via Spring AI with strict constraints (quality rating, risks, invalidation)
-4. **Rule Validation** - Check all hard rules (quality, HTF alignment, session, trade limits)
-5. **Risk Calculation** - Calculate position size, stop loss, take profit (min 1:3 R:R)
-6. **Signal Creation** - Combine all results into trade signal
-7. **Journal Entry** - Automatically log everything to database
-8. **Telegram Notification** - Send formatted alert to trader
+4. **Rule Validation** - Check all hard rules (quality, HTF alignment, session, daily loss limits)
+5. **Signal Decision** - Determine if trade should be taken (YES/NO)
+6. **Journal Entry** - Automatically log everything to database
+7. **Telegram Notification** - Send formatted alert to trader (ONLY for confirmed/VALID trades)
+8. **Human Decision** - Trader manually decides entry price, position size, stop loss, and take profit
 
 ## Telegram Notification Format
 
@@ -345,23 +345,27 @@ Symbol: BTCUSDT
 Direction: LONG
 Event: liquidity_sweep_long
 Session: NY
+Price: 43120.50
 
 AI Quality: A
 Alignment: 85/100
 Key Risk: HTF resistance nearby
 
+Market Data:
+HTF Bias: bullish
+Volatility: 1.8
+OI Change: 3.45%
+
 Rule Check: ✅ PASS
 
-Risk Management:
-Entry: 43120
-Stop: 42900
-Target: 43780
-Size: 0.045
-R:R: 1:3.0
+Action: Trade confirmed - Human decides entry, position size, and risk management
 
-Action: Monitor per trading plan
 Invalidation: Break below swept low
+
+Summary: Strong liquidity sweep with HTF alignment and volume confirmation
 ```
+
+**Note:** System only provides YES/NO decision. Trader manually calculates entry, stop, target, and position size based on their risk management rules.
 
 ## Database Schema
 

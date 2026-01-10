@@ -16,7 +16,6 @@ public class SignalProcessingService {
     private final ContextBuilderService contextBuilder;
     private final AiAnalysisService aiAnalysis;
     private final RuleEngineService ruleEngine;
-    private final RiskEngineService riskEngine;
     private final JournalService journalService;
     private final NotificationService notificationService;
 
@@ -45,24 +44,21 @@ public class SignalProcessingService {
             log.info("Step 3: Validating against rules");
             final var ruleResult = ruleEngine.validateSetup(context, assessment);
 
-            log.info("Step 4: Calculating risk parameters");
+            log.info("Step 4: Creating trade signal");
             final var direction = determineDirection(webhook.getEvent());
-            final var riskCalc = riskEngine.calculateRisk(context, direction);
-
-            log.info("Step 5: Creating trade signal");
             final var signal = createTradeSignal(
-                    signalId, webhook, context, assessment, ruleResult, riskCalc, direction
+                    signalId, webhook, context, assessment, ruleResult, direction
             );
 
-            log.info("Step 6: Creating journal entry");
+            log.info("Step 5: Creating journal entry");
             journalService.createEntry(signal);
 
             // Only send notification for confirmed trades (VALID status means can trade)
             if ("VALID".equals(signal.getStatus())) {
-                log.info("Step 7: Sending notification for confirmed trade");
+                log.info("Step 6: Sending notification for confirmed trade");
                 notificationService.sendSignalNotification(signal);
             } else {
-                log.info("Step 7: Skipping notification - Trade not confirmed (status: {})", signal.getStatus());
+                log.info("Step 6: Skipping notification - Trade not confirmed (status: {})", signal.getStatus());
             }
 
             log.info("Signal processing complete - Status: {}", signal.getStatus());
@@ -76,23 +72,19 @@ public class SignalProcessingService {
 
     private TradeSignal createTradeSignal(final String signalId, final TradingViewWebhook webhook,
                                            final MarketContext context, final AiAssessment assessment,
-                                           final RuleResult ruleResult, final RiskCalculation riskCalc,
-                                           final String direction) {
+                                           final RuleResult ruleResult, final String direction) {
         final String status;
         final String action;
 
         if (!ruleResult.isPassed()) {
             status = "INVALID";
             action = "Setup blocked by rules - Do not trade";
-        } else if (!riskCalc.isWithinRiskLimits()) {
-            status = "INVALID";
-            action = "Risk limits violated - " + riskCalc.getLimitViolation();
         } else if (assessment.getSetupQuality().equals("C")) {
             status = "INVALID";
             action = "Setup quality too low for consideration";
         } else {
             status = "VALID";
-            action = "Monitor per trading plan";
+            action = "Trade confirmed - Human decides entry, position size, and risk management";
         }
 
         return TradeSignal.builder()
@@ -103,7 +95,6 @@ public class SignalProcessingService {
                 .marketContext(context)
                 .aiAssessment(assessment)
                 .ruleResult(ruleResult)
-                .riskCalculation(riskCalc)
                 .timestamp(LocalDateTime.now())
                 .status(status)
                 .action(action)

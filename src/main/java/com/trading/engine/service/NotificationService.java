@@ -37,7 +37,8 @@ public class NotificationService extends TelegramLongPollingBot {
         sb.append("**Symbol:** ").append(signal.getSymbol()).append("\n");
         sb.append("**Direction:** ").append(signal.getDirection()).append("\n");
         sb.append("**Event:** ").append(signal.getEvent()).append("\n");
-        sb.append("**Session:** ").append(signal.getMarketContext().getSession()).append("\n\n");
+        sb.append("**Session:** ").append(signal.getMarketContext().getSession()).append("\n");
+        sb.append("**Price:** ").append(signal.getMarketContext().getCurrentPrice()).append("\n\n");
 
         // AI Assessment
         sb.append("**AI Quality:** ").append(signal.getAiAssessment().getSetupQuality()).append("\n");
@@ -47,6 +48,15 @@ public class NotificationService extends TelegramLongPollingBot {
                         ? "None identified"
                         : signal.getAiAssessment().getRiskFactors().get(0)
         ).append("\n\n");
+
+        // Market Context
+        sb.append("**Market Data:**\n");
+        sb.append("HTF Bias: ").append(signal.getMarketContext().getHtfBias()).append("\n");
+        sb.append("Volatility: ").append(signal.getMarketContext().getVolatility()).append("\n");
+        if (signal.getMarketContext().getOiChangePercent() != null) {
+            sb.append("OI Change: ").append(String.format("%.2f%%", signal.getMarketContext().getOiChangePercent())).append("\n");
+        }
+        sb.append("\n");
 
         // Rule Check
         sb.append("**Rule Check:** ");
@@ -58,21 +68,14 @@ public class NotificationService extends TelegramLongPollingBot {
         }
         sb.append("\n");
 
-        // Risk Parameters (if valid)
-        if (signal.getStatus().equals("VALID") && signal.getRiskCalculation() != null) {
-            sb.append("**Risk Management:**\n");
-            sb.append("Entry: ").append(signal.getRiskCalculation().getEntryPrice()).append("\n");
-            sb.append("Stop: ").append(signal.getRiskCalculation().getStopLoss()).append("\n");
-            sb.append("Target: ").append(signal.getRiskCalculation().getTakeProfit()).append("\n");
-            sb.append("Size: ").append(signal.getRiskCalculation().getPositionSize()).append("\n");
-            sb.append("R:R: 1:").append(signal.getRiskCalculation().getRiskRewardRatio()).append("\n\n");
-        }
-
         // Action
-        sb.append("**Action:** ").append(signal.getAction()).append("\n");
+        sb.append("**Action:** ").append(signal.getAction()).append("\n\n");
 
         // Invalidation
-        sb.append("**Invalidation:** ").append(signal.getAiAssessment().getInvalidation()).append("\n");
+        sb.append("**Invalidation:** ").append(signal.getAiAssessment().getInvalidation()).append("\n\n");
+
+        // AI Summary
+        sb.append("**Summary:** ").append(signal.getAiAssessment().getSummary()).append("\n");
 
         return sb.toString();
     }

@@ -27,14 +27,10 @@ public class MockNotificationService extends TelegramLongPollingBot {
         log.info("[MOCK TELEGRAM] Rule Check: {}", signal.getRuleResult().isPassed() ? "PASS" : "FAIL");
         log.info("[MOCK TELEGRAM] Status: {}", signal.getStatus());
         log.info("[MOCK TELEGRAM] Action: {}", signal.getAction());
-
-        if (signal.getRiskCalculation() != null) {
-            log.info("[MOCK TELEGRAM] Entry: {}", signal.getRiskCalculation().getEntryPrice());
-            log.info("[MOCK TELEGRAM] Stop: {}", signal.getRiskCalculation().getStopLoss());
-            log.info("[MOCK TELEGRAM] Target: {}", signal.getRiskCalculation().getTakeProfit());
-            log.info("[MOCK TELEGRAM] R:R: 1:{}", signal.getRiskCalculation().getRiskRewardRatio());
-        }
-
+        log.info("[MOCK TELEGRAM] Price: {}", signal.getMarketContext().getCurrentPrice());
+        log.info("[MOCK TELEGRAM] HTF Bias: {}", signal.getMarketContext().getHtfBias());
+        log.info("[MOCK TELEGRAM] Volatility: {}", signal.getMarketContext().getVolatility());
+        log.info("[MOCK TELEGRAM] Summary: {}", signal.getAiAssessment().getSummary());
         log.info("[MOCK TELEGRAM] ========================================");
     }
 

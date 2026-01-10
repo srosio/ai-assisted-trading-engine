@@ -28,11 +28,9 @@ public class TradeSignal {
 
     private RuleResult ruleResult;
 
-    private RiskCalculation riskCalculation;
-
     private LocalDateTime timestamp;
 
     private String status; // VALID, INVALID, EXPIRED
 
-    private String action; // "Monitor per trading plan", "Setup invalid", etc.
+    private String action; // Human decides entry and risk management
 }

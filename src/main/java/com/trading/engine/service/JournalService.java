@@ -45,13 +45,8 @@ public class JournalService {
                     .status(signal.getStatus())
                     .build();
 
-            if (signal.getRiskCalculation() != null) {
-                entry.setEntryPrice(signal.getRiskCalculation().getEntryPrice());
-                entry.setStopLoss(signal.getRiskCalculation().getStopLoss());
-                entry.setTakeProfit(signal.getRiskCalculation().getTakeProfit());
-                entry.setPositionSize(signal.getRiskCalculation().getPositionSize());
-                entry.setRiskRewardRatio(signal.getRiskCalculation().getRiskRewardRatio());
-            }
+            // Risk calculations (entry, stop, size, etc.) are done manually by human trader
+            // These fields remain null and can be filled in later via updateTradeOutcome
 
             final var saved = journalRepository.save(entry);
             log.info("Journal entry created with ID: {}", saved.getId());
