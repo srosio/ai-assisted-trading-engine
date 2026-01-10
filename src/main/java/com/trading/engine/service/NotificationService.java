@@ -152,20 +152,13 @@ public class NotificationService extends TelegramLongPollingBot {
                         attempts, e.getMessage());
                 if (attempts < telegramConfig.getRetryAttempts()) {
                     try {
-                        Thread.sleep(1000 * attempts);
+                        Thread.sleep(1000L * attempts);
                     } catch (final InterruptedException ie) {
                         Thread.currentThread().interrupt();
                     }
                 }
             }
         }
-    }
-
-    public void sendAlert(final String message) {
-        if (!telegramConfig.getEnabled()) {
-            return;
-        }
-        sendMessage(message);
     }
 
     @Override
