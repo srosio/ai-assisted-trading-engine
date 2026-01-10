@@ -91,7 +91,7 @@ public class NotificationService extends TelegramLongPollingBot {
     /**
      * Send message with retry logic
      */
-    private void sendMessage(String text) {
+    public void sendMessage(String text) {
         SendMessage message = new SendMessage();
         message.setChatId(telegramConfig.getChatId());
         message.setText(text);
