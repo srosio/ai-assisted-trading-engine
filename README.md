@@ -46,15 +46,6 @@ Risk Engine (Position sizing)
 Telegram Notification + Journal
 ```
 
-## Recent Updates
-
-### API Modernization (Latest)
-- ✅ **camelCase JSON** - All API requests and responses now use camelCase field names (e.g., `previousDayHigh`, `setupQuality`)
-- ✅ **Spring AI Integration** - Replaced manual Claude API calls with Spring AI framework for cleaner, declarative AI integration
-- ✅ **API Key Authentication** - Added Spring Security with API key authentication to protect webhook endpoints
-- ✅ **Pine Script v6** - Updated TradingView integration to use Pine Script version 6
-- ✅ **Java 21 Patterns** - Applied modern Java patterns throughout (var, final, List.of(), Map.of())
-
 ## Tech Stack
 
 - **Java 21** with modern patterns (var, final, records)
