@@ -1,0 +1,49 @@
+# Mock Mode Configuration
+# Use this profile to run the system with mock data (no real API keys needed)
+# Run with: ./gradlew bootRun --args='--spring.profiles.active=mock'
+
+mock:
+  enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.trading.engine: DEBUG
+    com.trading.engine.service.mock: INFO
+
+# Mock-friendly database (H2 in-memory for quick testing)
+spring:
+  datasource:
+    url: jdbc:h2:mem:trading_engine
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  flyway:
+    enabled: false  # Disable Flyway for H2
+
+# Disable Redis for mock mode
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+  cache:
+    type: simple  # Use simple in-memory cache instead of Redis
+
+# Trading config for demo
+trading:
+  account-balance: 10000
+  default-risk-percent: 1.0
+  max-trades-per-day: 5  # More trades for testing
+  allow-c-quality: true  # Allow all qualities for testing
