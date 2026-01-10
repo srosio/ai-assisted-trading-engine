@@ -48,9 +48,9 @@ Telegram Notification + Journal
 
 ## Tech Stack
 
-- **Java 17+**
+- **Java 21**
 - **Spring Boot 3.2.1**
-- **Gradle** with wrapper (no installation needed)
+- **Gradle 8.14.3** with wrapper (no installation needed)
 - **PostgreSQL** (journal & stats)
 - **Redis** (market data cache)
 - **Claude API** (constrained analysis)
@@ -144,7 +144,7 @@ Choose your deployment method:
 
 #### 1. Prerequisites
 
-- Java 17 or higher (Gradle wrapper included - no Gradle installation needed)
+- Java 21 (Gradle wrapper included - no Gradle installation needed)
 - PostgreSQL 14+ (optional - use mock mode for testing)
 - Redis 6+ (optional - use mock mode for testing)
 - Claude API key (optional - use mock mode for testing)
