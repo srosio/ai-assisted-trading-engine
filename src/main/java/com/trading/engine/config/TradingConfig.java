@@ -6,10 +6,6 @@ import org.springframework.context.annotation.Configuration;
 
 import java.math.BigDecimal;
 
-/**
- * Core trading rules and risk parameters.
- * These are NON-NEGOTIABLE and cannot be modified by AI.
- */
 @Configuration
 @ConfigurationProperties(prefix = "trading")
 @Data

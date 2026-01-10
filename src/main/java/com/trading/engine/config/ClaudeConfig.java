@@ -17,7 +17,7 @@ public class ClaudeConfig {
 
     private Integer maxTokens = 1024;
 
-    private Double temperature = 0.3; // Lower temperature for consistent, factual analysis
+    private Double temperature = 0.3;
 
     private Integer timeoutSeconds = 30;
 

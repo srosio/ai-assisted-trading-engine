@@ -38,7 +38,6 @@ public class AiAnalysisService {
                     .call()
                     .entity(AiAssessment.class);
 
-            // Validate assessment
             validateAssessment(assessment);
 
             log.info("AI Assessment complete - Quality: {}, Alignment: {}",
@@ -46,16 +45,15 @@ public class AiAnalysisService {
 
             return assessment;
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("Error getting AI analysis: {}", e.getMessage(), e);
-            // Return fallback assessment
             return createFallbackAssessment(e.getMessage());
         }
     }
 
     private void validateAssessment(final AiAssessment assessment) {
         if (assessment.getSetupQuality() == null ||
-                !List.of("A", "B", "C").contains(assessment.getSetupQuality())) {
+            !List.of("A", "B", "C").contains(assessment.getSetupQuality())) {
             throw new IllegalStateException("Invalid setup quality: " + assessment.getSetupQuality());
         }
 
@@ -67,14 +65,12 @@ public class AiAnalysisService {
             log.warn("AI did not provide invalidation criteria");
         }
 
-        // Ensure alignment score is in valid range
         if (assessment.getAlignmentScore() != null) {
             if (assessment.getAlignmentScore() < 0 || assessment.getAlignmentScore() > 100) {
                 log.warn("Invalid alignment score: {}, capping to range", assessment.getAlignmentScore());
                 assessment.setAlignmentScore(Math.max(0, Math.min(100, assessment.getAlignmentScore())));
             }
         } else {
-            // Default alignment score based on quality
             assessment.setAlignmentScore(getDefaultAlignmentScore(assessment.getSetupQuality()));
         }
     }
@@ -103,9 +99,8 @@ public class AiAnalysisService {
 
     public boolean isHealthy() {
         try {
-            // Simple health check - just verify we can construct a request
             return claudeConfig.getApiKey() != null && !claudeConfig.getApiKey().isEmpty();
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("AI service health check failed: {}", e.getMessage());
             return false;
         }

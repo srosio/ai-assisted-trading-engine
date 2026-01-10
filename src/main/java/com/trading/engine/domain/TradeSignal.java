@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Complete trade signal after all validations.
- * This is NOT an order - it's information for the human trader.
- */
 @Data
 @Builder
 @NoArgsConstructor

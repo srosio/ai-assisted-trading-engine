@@ -1,6 +1,5 @@
 package com.trading.engine.controller;
 
-import com.trading.engine.domain.TradeSignal;
 import com.trading.engine.domain.TradingViewWebhook;
 import com.trading.engine.service.SignalProcessingService;
 import jakarta.validation.Valid;
@@ -40,7 +39,7 @@ public class WebhookController {
                     "setupQuality", signal.getAiAssessment() != null
                             ? signal.getAiAssessment().getSetupQuality() : "N/A",
                     "rulesPassed", signal.getRuleResult() != null
-                            && signal.getRuleResult().isPassed()
+                                   && signal.getRuleResult().isPassed()
             );
 
             log.info("Webhook processed successfully - Signal ID: {}, Status: {}",
@@ -48,7 +47,7 @@ public class WebhookController {
 
             return ResponseEntity.ok(response);
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("Error processing webhook: {}", e.getMessage(), e);
 
             final var errorResponse = Map.of(

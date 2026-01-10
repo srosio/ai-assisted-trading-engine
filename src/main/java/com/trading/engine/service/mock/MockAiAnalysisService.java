@@ -11,15 +11,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Mock AI Analysis Service
- * Returns simulated AI assessments when Claude API key is not configured.
- *
- * Useful for:
- * - Testing without Claude API access
- * - Development environment
- * - Cost-free testing
- */
 @Service
 @Primary
 @ConditionalOnProperty(name = "mock.enabled", havingValue = "true")
@@ -28,24 +19,22 @@ public class MockAiAnalysisService {
 
     private final Random random = new Random();
 
-    public AiAssessment analyzeContext(MarketContext context) {
+    public AiAssessment analyzeContext(final MarketContext context) {
         log.info("[MOCK] Analyzing market context for {} - Event: {}",
                 context.getSymbol(), context.getLiquidityEvent());
 
-        // Simulate processing time
         try {
-            Thread.sleep(500 + random.nextInt(1000)); // 0.5-1.5 seconds
-        } catch (InterruptedException e) {
+            Thread.sleep(500 + random.nextInt(1000));
+        } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        // Generate realistic mock assessment
-        String quality = generateQuality(context);
-        List<String> risks = generateRiskFactors(context);
-        String invalidation = generateInvalidation(context);
-        int alignmentScore = generateAlignmentScore(quality);
+        final var quality = generateQuality(context);
+        final var risks = generateRiskFactors(context);
+        final var invalidation = generateInvalidation(context);
+        final var alignmentScore = generateAlignmentScore(quality);
 
-        AiAssessment assessment = AiAssessment.builder()
+        final var assessment = AiAssessment.builder()
                 .setupQuality(quality)
                 .riskFactors(risks)
                 .invalidation(invalidation)
@@ -60,38 +49,32 @@ public class MockAiAnalysisService {
         return assessment;
     }
 
-    private String generateQuality(MarketContext context) {
-        // Assess quality based on context factors
-        int score = 0;
+    private String generateQuality(final MarketContext context) {
+        var score = 0;
 
-        // HTF alignment adds points
         if (context.getHtfBias() != null && !context.getHtfBias().equals("neutral")) {
             score += 30;
         }
 
-        // Volume spike is positive
         if (Boolean.TRUE.equals(context.getVolumeSpike())) {
             score += 25;
         }
 
-        // OI increase is positive
         if (context.getOiChangePercent() != null && context.getOiChangePercent() > 2.0) {
             score += 20;
         }
 
-        // Displacement is positive
         if (Boolean.TRUE.equals(context.getDisplacementDetected())) {
             score += 25;
         }
 
-        // Map score to quality
         if (score >= 70) return "A";
         if (score >= 40) return "B";
         return "C";
     }
 
-    private List<String> generateRiskFactors(MarketContext context) {
-        List<String> allRisks = Arrays.asList(
+    private List<String> generateRiskFactors(final MarketContext context) {
+        final var allRisks = Arrays.asList(
                 "HTF resistance nearby",
                 "Funding rate skewed",
                 "Low volume session ahead",
@@ -101,13 +84,12 @@ public class MockAiAnalysisService {
                 "Key level retest needed"
         );
 
-        // Return 1-3 random risks
-        int numRisks = 1 + random.nextInt(3);
+        final var numRisks = 1 + random.nextInt(3);
         return allRisks.subList(0, numRisks);
     }
 
-    private String generateInvalidation(MarketContext context) {
-        String event = context.getLiquidityEvent();
+    private String generateInvalidation(final MarketContext context) {
+        final var event = context.getLiquidityEvent();
 
         if (event != null && event.toLowerCase().contains("long")) {
             return "Break below swept low";
@@ -118,16 +100,16 @@ public class MockAiAnalysisService {
         return "Loss of structural integrity";
     }
 
-    private int generateAlignmentScore(String quality) {
+    private int generateAlignmentScore(final String quality) {
         return switch (quality) {
-            case "A" -> 75 + random.nextInt(20); // 75-95
-            case "B" -> 50 + random.nextInt(25); // 50-75
-            case "C" -> 25 + random.nextInt(25); // 25-50
+            case "A" -> 75 + random.nextInt(20);
+            case "B" -> 50 + random.nextInt(25);
+            case "C" -> 25 + random.nextInt(25);
             default -> 50;
         };
     }
 
-    private String generateSummary(MarketContext context, String quality) {
+    private String generateSummary(final MarketContext context, final String quality) {
         if (quality.equals("A")) {
             return "Strong alignment with liquidity sweep model. Conditions favor continuation if volume sustains.";
         } else if (quality.equals("B")) {
@@ -137,8 +119,8 @@ public class MockAiAnalysisService {
         }
     }
 
-    private String generateKeyObservation(MarketContext context) {
-        List<String> observations = Arrays.asList(
+    private String generateKeyObservation(final MarketContext context) {
+        final var observations = Arrays.asList(
                 "Watch for follow-through on next candle",
                 "Monitor funding rate for reversal",
                 "HTF bias confirms direction",

@@ -8,22 +8,13 @@ import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
-/**
- * Mock Notification Service
- * Logs notifications instead of sending to Telegram when bot token is not configured.
- *
- * Useful for:
- * - Testing without Telegram setup
- * - Development environment
- * - CI/CD pipelines
- */
 @Service
 @Primary
 @ConditionalOnProperty(name = "mock.enabled", havingValue = "true")
 @Slf4j
 public class MockNotificationService extends TelegramLongPollingBot {
 
-    public void sendSignalNotification(TradeSignal signal) {
+    public void sendSignalNotification(final TradeSignal signal) {
         log.info("[MOCK TELEGRAM] ========================================");
         log.info("[MOCK TELEGRAM] TRADE SIGNAL NOTIFICATION");
         log.info("[MOCK TELEGRAM] ========================================");
@@ -47,7 +38,7 @@ public class MockNotificationService extends TelegramLongPollingBot {
         log.info("[MOCK TELEGRAM] ========================================");
     }
 
-    public void sendAlert(String message) {
+    public void sendAlert(final String message) {
         log.info("[MOCK TELEGRAM] Alert: {}", message);
     }
 
@@ -62,7 +53,6 @@ public class MockNotificationService extends TelegramLongPollingBot {
     }
 
     @Override
-    public void onUpdateReceived(Update update) {
-        // Mock implementation - does nothing
+    public void onUpdateReceived(final Update update) {
     }
 }

@@ -10,16 +10,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/**
- * Risk Engine with NON-NEGOTIABLE risk management.
- * AI CANNOT modify these parameters.
- *
- * Rules:
- * - Risk per trade: 0.5% - 1%
- * - Minimum R:R: 1:3
- * - Max trades per day: 2
- * - Max daily loss: -2R
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,29 +18,23 @@ public class RiskEngineService {
     private final TradingConfig tradingConfig;
     private final JournalService journalService;
 
-    /**
-     * Calculate risk parameters and position size
-     */
-    public RiskCalculation calculateRisk(MarketContext context, String direction) {
+    public RiskCalculation calculateRisk(final MarketContext context, final String direction) {
         log.info("Calculating risk for {} - Direction: {}", context.getSymbol(), direction);
 
-        BigDecimal accountBalance = tradingConfig.getAccountBalance();
-        BigDecimal riskPercent = tradingConfig.getDefaultRiskPercent();
+        final var accountBalance = tradingConfig.getAccountBalance();
+        final var riskPercent = tradingConfig.getDefaultRiskPercent();
 
-        // Calculate risk amount in dollars
-        BigDecimal riskAmount = accountBalance
+        final var riskAmount = accountBalance
                 .multiply(riskPercent)
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
 
-        // Determine entry, stop loss, and take profit based on direction and ATR
-        BigDecimal entryPrice = context.getCurrentPrice();
-        BigDecimal atr = context.getAtrValue();
+        final var entryPrice = context.getCurrentPrice();
+        final var atr = context.getAtrValue();
 
-        // Use ATR for stop loss calculation (1.5 ATR typical)
-        BigDecimal stopDistance = atr.multiply(new BigDecimal("1.5"));
+        final var stopDistance = atr.multiply(new BigDecimal("1.5"));
 
-        BigDecimal stopLoss;
-        BigDecimal takeProfit;
+        final BigDecimal stopLoss;
+        final BigDecimal takeProfit;
 
         if (direction.equalsIgnoreCase("LONG")) {
             stopLoss = entryPrice.subtract(stopDistance);
@@ -60,20 +44,16 @@ public class RiskEngineService {
             takeProfit = entryPrice.subtract(stopDistance.multiply(tradingConfig.getMinRiskRewardRatio()));
         }
 
-        // Calculate position size
-        BigDecimal positionSize = riskAmount.divide(stopDistance, 8, RoundingMode.HALF_UP);
+        final var positionSize = riskAmount.divide(stopDistance, 8, RoundingMode.HALF_UP);
 
-        // Calculate R:R ratio
-        BigDecimal reward = takeProfit.subtract(entryPrice).abs();
-        BigDecimal risk = entryPrice.subtract(stopLoss).abs();
-        BigDecimal rrRatio = reward.divide(risk, 2, RoundingMode.HALF_UP);
+        final var reward = takeProfit.subtract(entryPrice).abs();
+        final var risk = entryPrice.subtract(stopLoss).abs();
+        final var rrRatio = reward.divide(risk, 2, RoundingMode.HALF_UP);
 
-        // Get today's stats
-        long tradesUsedToday = journalService.getTodayTradeCount();
-        BigDecimal dailyLoss = journalService.getTodayPnL();
+        final var tradesUsedToday = journalService.getTodayTradeCount();
+        final var dailyLoss = journalService.getTodayPnL();
 
-        // Check limits
-        boolean withinLimits = true;
+        var withinLimits = true;
         String limitViolation = null;
 
         if (tradesUsedToday >= tradingConfig.getMaxTradesPerDay()) {
@@ -91,7 +71,7 @@ public class RiskEngineService {
             limitViolation = "R:R ratio below minimum of " + tradingConfig.getMinRiskRewardRatio();
         }
 
-        RiskCalculation calculation = RiskCalculation.builder()
+        final var calculation = RiskCalculation.builder()
                 .accountBalance(accountBalance)
                 .riskPercentage(riskPercent)
                 .riskAmount(riskAmount)
@@ -114,37 +94,32 @@ public class RiskEngineService {
         return calculation;
     }
 
-    /**
-     * Calculate custom risk with specific stop loss
-     * (for when trader has a specific stop in mind)
-     */
-    public RiskCalculation calculateRiskWithStop(BigDecimal entryPrice, BigDecimal stopLoss,
-                                                   String direction, String symbol) {
-        BigDecimal accountBalance = tradingConfig.getAccountBalance();
-        BigDecimal riskPercent = tradingConfig.getDefaultRiskPercent();
-        BigDecimal riskAmount = accountBalance
+    public RiskCalculation calculateRiskWithStop(final BigDecimal entryPrice, final BigDecimal stopLoss,
+                                                   final String direction, final String symbol) {
+        final var accountBalance = tradingConfig.getAccountBalance();
+        final var riskPercent = tradingConfig.getDefaultRiskPercent();
+        final var riskAmount = accountBalance
                 .multiply(riskPercent)
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
 
-        BigDecimal stopDistance = entryPrice.subtract(stopLoss).abs();
-        BigDecimal positionSize = riskAmount.divide(stopDistance, 8, RoundingMode.HALF_UP);
+        final var stopDistance = entryPrice.subtract(stopLoss).abs();
+        final var positionSize = riskAmount.divide(stopDistance, 8, RoundingMode.HALF_UP);
 
-        // Calculate take profit based on minimum R:R
-        BigDecimal takeProfit;
+        final BigDecimal takeProfit;
         if (direction.equalsIgnoreCase("LONG")) {
             takeProfit = entryPrice.add(stopDistance.multiply(tradingConfig.getMinRiskRewardRatio()));
         } else {
             takeProfit = entryPrice.subtract(stopDistance.multiply(tradingConfig.getMinRiskRewardRatio()));
         }
 
-        BigDecimal reward = takeProfit.subtract(entryPrice).abs();
-        BigDecimal risk = entryPrice.subtract(stopLoss).abs();
-        BigDecimal rrRatio = reward.divide(risk, 2, RoundingMode.HALF_UP);
+        final var reward = takeProfit.subtract(entryPrice).abs();
+        final var risk = entryPrice.subtract(stopLoss).abs();
+        final var rrRatio = reward.divide(risk, 2, RoundingMode.HALF_UP);
 
-        long tradesUsedToday = journalService.getTodayTradeCount();
-        BigDecimal dailyLoss = journalService.getTodayPnL();
+        final var tradesUsedToday = journalService.getTodayTradeCount();
+        final var dailyLoss = journalService.getTodayPnL();
 
-        boolean withinLimits = tradesUsedToday < tradingConfig.getMaxTradesPerDay()
+        final var withinLimits = tradesUsedToday < tradingConfig.getMaxTradesPerDay()
                 && dailyLoss.compareTo(tradingConfig.getMaxDailyLossR().negate().multiply(riskAmount)) >= 0
                 && rrRatio.compareTo(tradingConfig.getMinRiskRewardRatio()) >= 0;
 
@@ -165,10 +140,7 @@ public class RiskEngineService {
                 .build();
     }
 
-    /**
-     * Validate that risk calculation is acceptable
-     */
-    public boolean isRiskAcceptable(RiskCalculation calculation) {
+    public boolean isRiskAcceptable(final RiskCalculation calculation) {
         if (!calculation.isWithinRiskLimits()) {
             log.warn("Risk calculation failed limits check: {}", calculation.getLimitViolation());
             return false;

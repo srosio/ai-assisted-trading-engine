@@ -7,10 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/**
- * Risk and position sizing calculation.
- * Based on non-negotiable risk rules.
- */
 @Data
 @Builder
 @NoArgsConstructor
