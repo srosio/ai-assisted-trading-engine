@@ -1,13 +1,13 @@
 package com.trading.engine.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.trading.engine.config.ClaudeConfig;
 import com.trading.engine.domain.AiAssessment;
 import com.trading.engine.domain.MarketContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,7 +19,7 @@ public class AiAnalysisService {
 
     private final ChatClient chatClient;
     private final ClaudeConfig claudeConfig;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     public AiAssessment analyzeContext(final MarketContext context) {
         log.info("Requesting AI analysis for {} - Event: {}", context.getSymbol(), context.getLiquidityEvent());
@@ -27,14 +27,41 @@ public class AiAnalysisService {
         try {
             // Build the constrained prompt
             final var contextJson = objectMapper.writeValueAsString(context);
-            final var prompt = String.format(ClaudeConfig.ANALYSIS_PROMPT_TEMPLATE, contextJson);
 
-            // Create output converter for structured response
-            final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
+            // Build prompt with plain text concatenation to avoid Spring AI template parsing
+            final var promptText = """
+                    You are a professional crypto market analyst.
+                    You do NOT give trading advice.
+                    You do NOT make buy/sell decisions.
+                    You do NOT modify risk parameters.
 
-            // Call Claude API using Spring AI ChatClient
+                    Your role is LIMITED to:
+                    1. Assessing alignment with a liquidity sweep continuation model
+                    2. Identifying risks and invalidation signals
+                    3. Classifying setup quality (A, B, or C)
+
+                    Given the structured market context below, provide your analysis.
+                    Respond in strict JSON format only.
+
+                    Market context:
+                    """ + contextJson + """
+
+
+                    Expected JSON response format:
+                    {
+                      "setupQuality": "A|B|C",
+                      "riskFactors": ["factor1", "factor2"],
+                      "invalidation": "description",
+                      "summary": "brief factual summary",
+                      "alignmentScore": 0-100,
+                      "keyObservation": "most important thing to watch"
+                    }
+                    """;
+
+            // Call Claude API using Spring AI ChatClient with system message
             final var assessment = chatClient.prompt()
-                    .user(prompt)
+                    .system("You are a professional crypto market analyst. Respond ONLY with valid JSON.")
+                    .user(promptText)
                     .call()
                     .entity(AiAssessment.class);
 
