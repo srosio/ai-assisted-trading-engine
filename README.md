@@ -197,10 +197,6 @@ src/main/java/com/trading/engine/
 
 ## Setup Instructions
 
-Choose your deployment method:
-- **☁️ Cloud (Recommended):** Deploy to Fly.io in 5 minutes → [Fly.io Guide](docs/FLYIO_DEPLOYMENT.md)
-- **💻 Local Development:** Run on your machine → Instructions below
-
 ### Local Development Setup
 
 #### 1. Prerequisites
