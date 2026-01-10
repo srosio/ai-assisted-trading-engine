@@ -12,9 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +27,7 @@ public class JournalService {
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Transactional
-    public JournalEntry createEntry(final TradeSignal signal) {
+    public void createEntry(final TradeSignal signal) {
         log.info("Creating journal entry for signal: {}", signal.getSignalId());
 
         try {
@@ -55,7 +56,6 @@ public class JournalService {
 
             final var saved = journalRepository.save(entry);
             log.info("Journal entry created with ID: {}", saved.getId());
-            return saved;
 
         } catch (final Exception e) {
             log.error("Error creating journal entry: {}", e.getMessage(), e);
@@ -73,8 +73,8 @@ public class JournalService {
         final var todayTrades = journalRepository.findTakenTradesToday(startOfDay);
 
         return todayTrades.stream()
-                .filter(entry -> entry.getPnl() != null)
                 .map(JournalEntry::getPnl)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -84,7 +84,7 @@ public class JournalService {
         final var riskPercent = tradingConfig.getDefaultRiskPercent();
         final var riskAmount = accountBalance
                 .multiply(riskPercent)
-                .divide(new BigDecimal("100"), 2, BigDecimal.ROUND_HALF_UP);
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
 
         final var maxLoss = tradingConfig.getMaxDailyLossR()
                 .multiply(riskAmount)
@@ -92,58 +92,5 @@ public class JournalService {
 
         return todayPnL.compareTo(maxLoss) >= 0;
     }
-
-    @Transactional
-    public void updateTradeOutcome(final String signalId, final boolean taken, final BigDecimal exitPrice,
-                                     final BigDecimal pnl, final String notes, final String outcome) {
-        journalRepository.findBySignalId(signalId).ifPresent(entry -> {
-            entry.setTradeTaken(taken);
-            entry.setExitPrice(exitPrice);
-            entry.setPnl(pnl);
-            entry.setNotes(notes);
-            entry.setOutcome(outcome);
-            entry.setClosedAt(LocalDateTime.now());
-            journalRepository.save(entry);
-            log.info("Updated journal entry {} with outcome: {}", signalId, outcome);
-        });
-    }
-
-    public List<JournalEntry> getEntriesBySymbol(final String symbol) {
-        return journalRepository.findBySymbolOrderByCreatedAtDesc(symbol);
-    }
-
-    public List<JournalEntry> getEntriesByDateRange(final LocalDateTime start, final LocalDateTime end) {
-        return journalRepository.findByCreatedAtBetween(start, end);
-    }
-
-    public List<JournalEntry> getEntriesByQuality(final String quality) {
-        return journalRepository.findBySetupQuality(quality);
-    }
-
-    public PerformanceStats getPerformanceStats(final LocalDateTime start, final LocalDateTime end) {
-        final var entries = journalRepository.findByCreatedAtBetween(start, end);
-
-        final var totalSignals = entries.size();
-        final var tradesTaken = entries.stream().filter(e -> Boolean.TRUE.equals(e.getTradeTaken())).count();
-        final var wins = entries.stream().filter(e -> "WIN".equals(e.getOutcome())).count();
-        final var losses = entries.stream().filter(e -> "LOSS".equals(e.getOutcome())).count();
-
-        final var totalPnL = entries.stream()
-                .filter(e -> e.getPnl() != null)
-                .map(JournalEntry::getPnl)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        final var winRate = tradesTaken > 0 ? (double) wins / tradesTaken * 100 : 0;
-
-        return new PerformanceStats(totalSignals, tradesTaken, wins, losses, totalPnL, winRate);
-    }
-
-    public record PerformanceStats(
-            long totalSignals,
-            long tradesTaken,
-            long wins,
-            long losses,
-            BigDecimal totalPnL,
-            double winRate
-    ) {}
+    
 }

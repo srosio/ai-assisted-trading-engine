@@ -56,11 +56,6 @@ public class RiskEngineService {
         var withinLimits = true;
         String limitViolation = null;
 
-        if (tradesUsedToday >= tradingConfig.getMaxTradesPerDay()) {
-            withinLimits = false;
-            limitViolation = "Max trades per day reached";
-        }
-
         if (dailyLoss.compareTo(tradingConfig.getMaxDailyLossR().negate().multiply(riskAmount)) < 0) {
             withinLimits = false;
             limitViolation = "Daily loss limit exceeded";
@@ -81,7 +76,6 @@ public class RiskEngineService {
                 .positionSize(positionSize)
                 .riskRewardRatio(rrRatio)
                 .tradesUsedToday(Math.toIntExact(tradesUsedToday))
-                .maxTradesPerDay(tradingConfig.getMaxTradesPerDay())
                 .dailyLoss(dailyLoss)
                 .maxDailyLoss(tradingConfig.getMaxDailyLossR().multiply(riskAmount))
                 .withinRiskLimits(withinLimits)
@@ -95,7 +89,7 @@ public class RiskEngineService {
     }
 
     public RiskCalculation calculateRiskWithStop(final BigDecimal entryPrice, final BigDecimal stopLoss,
-                                                   final String direction, final String symbol) {
+                                                 final String direction, final String symbol) {
         final var accountBalance = tradingConfig.getAccountBalance();
         final var riskPercent = tradingConfig.getDefaultRiskPercent();
         final var riskAmount = accountBalance
@@ -119,10 +113,6 @@ public class RiskEngineService {
         final var tradesUsedToday = journalService.getTodayTradeCount();
         final var dailyLoss = journalService.getTodayPnL();
 
-        final var withinLimits = tradesUsedToday < tradingConfig.getMaxTradesPerDay()
-                && dailyLoss.compareTo(tradingConfig.getMaxDailyLossR().negate().multiply(riskAmount)) >= 0
-                && rrRatio.compareTo(tradingConfig.getMinRiskRewardRatio()) >= 0;
-
         return RiskCalculation.builder()
                 .accountBalance(accountBalance)
                 .riskPercentage(riskPercent)
@@ -133,25 +123,9 @@ public class RiskEngineService {
                 .positionSize(positionSize)
                 .riskRewardRatio(rrRatio)
                 .tradesUsedToday(Math.toIntExact(tradesUsedToday))
-                .maxTradesPerDay(tradingConfig.getMaxTradesPerDay())
                 .dailyLoss(dailyLoss)
                 .maxDailyLoss(tradingConfig.getMaxDailyLossR().multiply(riskAmount))
-                .withinRiskLimits(withinLimits)
                 .build();
     }
-
-    public boolean isRiskAcceptable(final RiskCalculation calculation) {
-        if (!calculation.isWithinRiskLimits()) {
-            log.warn("Risk calculation failed limits check: {}", calculation.getLimitViolation());
-            return false;
-        }
-
-        if (calculation.getRiskRewardRatio().compareTo(tradingConfig.getMinRiskRewardRatio()) < 0) {
-            log.warn("R:R ratio {} below minimum {}",
-                    calculation.getRiskRewardRatio(), tradingConfig.getMinRiskRewardRatio());
-            return false;
-        }
-
-        return true;
-    }
+    
 }

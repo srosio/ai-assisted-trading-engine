@@ -20,20 +20,14 @@ import java.util.List;
 public class AiAnalysisService {
 
     private final ChatClient chatClient;
-    private final ClaudeConfig claudeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     public AiAssessment analyzeContext(final MarketContext context) {
         log.info("Requesting AI analysis for {} - Event: {}", context.getSymbol(), context.getLiquidityEvent());
 
         try {
-            // Build the constrained prompt - no curly braces to avoid template parsing
             final var contextJson = objectMapper.writeValueAsString(context);
-
-            // BeanOutputConverter automatically adds format instructions
             final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
-
-            // Build user message without JSON format example (let BeanOutputConverter handle it)
             final var userMessage = String.format("""
                     You are a professional crypto market analyst.
                     You do NOT give trading advice.
@@ -53,15 +47,12 @@ public class AiAnalysisService {
                     %s
                     """, contextJson, outputConverter.getFormat());
 
-            // Call Claude API using Spring AI ChatClient
             final var response = chatClient.prompt()
                     .user(userMessage)
                     .call()
                     .content();
 
-            // Parse response using the converter
             final var assessment = outputConverter.convert(response);
-
             validateAssessment(assessment);
 
             log.info("AI Assessment complete - Quality: {}, Alignment: {}",
@@ -121,12 +112,4 @@ public class AiAnalysisService {
                 .build();
     }
 
-    public boolean isHealthy() {
-        try {
-            return claudeConfig.getApiKey() != null && !claudeConfig.getApiKey().isEmpty();
-        } catch (final Exception e) {
-            log.error("AI service health check failed: {}", e.getMessage());
-            return false;
-        }
-    }
 }
