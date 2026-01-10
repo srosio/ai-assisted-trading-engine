@@ -37,7 +37,7 @@ Market Data Service (Binance)
         ↓
 Context Builder (Factual snapshot)
         ↓
-Claude AI Analysis (Constrained)
+Spring AI + Claude Analysis (Constrained)
         ↓
 Rule Engine (Hard validation)
         ↓
@@ -46,14 +46,24 @@ Risk Engine (Position sizing)
 Telegram Notification + Journal
 ```
 
+## Recent Updates
+
+### API Modernization (Latest)
+- ✅ **camelCase JSON** - All API requests and responses now use camelCase field names (e.g., `previousDayHigh`, `setupQuality`)
+- ✅ **Spring AI Integration** - Replaced manual Claude API calls with Spring AI framework for cleaner, declarative AI integration
+- ✅ **API Key Authentication** - Added Spring Security with API key authentication to protect webhook endpoints
+- ✅ **Pine Script v6** - Updated TradingView integration to use Pine Script version 6
+- ✅ **Java 21 Patterns** - Applied modern Java patterns throughout (var, final, List.of(), Map.of())
+
 ## Tech Stack
 
-- **Java 21**
+- **Java 21** with modern patterns (var, final, records)
 - **Spring Boot 3.2.1**
+- **Spring AI** (Anthropic integration for Claude)
+- **Spring Security** (API key authentication)
 - **Gradle 8.14.3** with wrapper (no installation needed)
 - **PostgreSQL** (journal & stats)
 - **Redis** (market data cache)
-- **Claude API** (constrained analysis)
 - **Binance Futures API** (market data)
 - **Telegram Bot API** (notifications)
 - **Mock Mode** for testing without API keys
@@ -83,18 +93,21 @@ Test the webhook:
 ```bash
 curl -X POST http://localhost:8080/api/webhook/tradingview \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-api-key-here" \
   -d '{
     "symbol": "BTCUSDT",
     "timeframe": "5m",
     "event": "liquidity_sweep_long",
     "session": "NY",
     "price": 43120.50,
-    "previous_day_high": 43210.00,
-    "previous_day_low": 42880.00,
-    "volume_spike": true,
-    "htf_bias": "bullish"
+    "previousDayHigh": 43210.00,
+    "previousDayLow": 42880.00,
+    "volumeSpike": true,
+    "htfBias": "bullish"
   }'
 ```
+
+**Note:** The API uses camelCase for all JSON fields. Set `WEBHOOK_API_KEY` environment variable for authentication.
 
 **You'll see detailed logs in the console showing the entire signal processing pipeline!**
 
@@ -126,6 +139,8 @@ src/main/java/com/trading/engine/
 │   ├── TradeSignal.java                # Complete signal
 │   └── JournalEntry.java               # Persistent record
 ├── config/
+│   ├── SpringAiConfig.java             # Spring AI & Anthropic setup
+│   ├── SecurityConfig.java             # API key authentication
 │   ├── ClaudeConfig.java               # Claude API config
 │   ├── BinanceConfig.java              # Binance config
 │   ├── TelegramConfig.java             # Telegram config
@@ -172,6 +187,11 @@ cp src/main/resources/application-example.yml src/main/resources/application-loc
 Edit `application-local.yml` with your credentials:
 
 ```yaml
+# Webhook API Security
+webhook:
+  api:
+    key: your-secure-webhook-api-key
+
 claude:
   api-key: your_claude_api_key_here
 
@@ -185,6 +205,17 @@ telegram:
 
 trading:
   account-balance: 10000  # Your account size
+```
+
+Or set environment variables:
+```bash
+export WEBHOOK_API_KEY=your-secure-webhook-api-key
+export CLAUDE_API_KEY=your_claude_api_key_here
+export BINANCE_API_KEY=your_binance_api_key
+export BINANCE_API_SECRET=your_binance_api_secret
+export TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+export TELEGRAM_CHAT_ID=your_telegram_chat_id
+export ACCOUNT_BALANCE=10000
 ```
 
 #### 4. Build & Run
@@ -221,7 +252,7 @@ Expected response:
 
 ### Pine Script Setup
 
-Your Pine Script should detect objective market events and send webhooks when structural conditions are met.
+Your Pine Script (v6) should detect objective market events and send webhooks when structural conditions are met.
 
 **Example events:**
 - Liquidity sweep (equal highs/lows taken)
@@ -229,7 +260,11 @@ Your Pine Script should detect objective market events and send webhooks when st
 - Displacement candle
 - Volume expansion
 
+See [docs/PINE_SCRIPT_EXAMPLE.pine](docs/PINE_SCRIPT_EXAMPLE.pine) for a complete Pine Script v6 implementation.
+
 ### Webhook Payload Format
+
+**All JSON fields use camelCase:**
 
 ```json
 {
@@ -238,10 +273,11 @@ Your Pine Script should detect objective market events and send webhooks when st
   "event": "liquidity_sweep_long",
   "session": "NY",
   "price": 43120,
-  "previous_day_high": 43210,
-  "previous_day_low": 42880,
-  "volume_spike": true,
-  "htf_bias": "bullish"
+  "previousDayHigh": 43210,
+  "previousDayLow": 42880,
+  "volumeSpike": true,
+  "displacementDetected": true,
+  "htfBias": "bullish"
 }
 ```
 
@@ -251,6 +287,10 @@ Configure TradingView to POST to:
 ```
 http://your-server:8080/api/webhook/tradingview
 ```
+
+**Authentication:** Include your API key in one of two ways:
+- Header: `X-API-Key: your-secret-api-key`
+- Query parameter: `?apiKey=your-secret-api-key`
 
 ## Configuration Reference
 
@@ -294,13 +334,14 @@ trading:
 
 When a webhook is received:
 
-1. **Context Building** - Fetch real-time data from Binance (price, OI, funding rate, volatility)
-2. **AI Analysis** - Send context to Claude with strict constraints (quality rating, risks, invalidation)
-3. **Rule Validation** - Check all hard rules (quality, HTF alignment, session, trade limits)
-4. **Risk Calculation** - Calculate position size, stop loss, take profit (min 1:3 R:R)
-5. **Signal Creation** - Combine all results into trade signal
-6. **Journal Entry** - Automatically log everything to database
-7. **Telegram Notification** - Send formatted alert to trader
+1. **Authentication** - Validate API key from X-API-Key header or apiKey parameter
+2. **Context Building** - Fetch real-time data from Binance (price, OI, funding rate, volatility)
+3. **AI Analysis** - Send context to Claude via Spring AI with strict constraints (quality rating, risks, invalidation)
+4. **Rule Validation** - Check all hard rules (quality, HTF alignment, session, trade limits)
+5. **Risk Calculation** - Calculate position size, stop loss, take profit (min 1:3 R:R)
+6. **Signal Creation** - Combine all results into trade signal
+7. **Journal Entry** - Automatically log everything to database
+8. **Telegram Notification** - Send formatted alert to trader
 
 ## Telegram Notification Format
 
@@ -364,19 +405,50 @@ WHERE setup_quality = 'A' AND trade_taken = true;
 ### POST /api/webhook/tradingview
 Receive TradingView webhook
 
+**Authentication:** Required via `X-API-Key` header or `apiKey` query parameter
+**Request:** JSON payload with camelCase field names
+**Response:** JSON with signal processing results
+
+Example response:
+```json
+{
+  "success": true,
+  "signalId": "abc123",
+  "status": "APPROVED",
+  "action": "MONITOR",
+  "setupQuality": "A",
+  "rulesPassed": true
+}
+```
+
 ### GET /api/webhook/health
-Health check
+Health check endpoint (no authentication required)
+
+**Response:**
+```json
+{
+  "status": "UP",
+  "service": "AI-Assisted Trading Engine"
+}
+```
 
 ### POST /api/webhook/test
 Test signal processing (for development)
 
+**Authentication:** Required via `X-API-Key` header or `apiKey` query parameter
+**Response:** Full signal object with all processing details
+
 ## Security Considerations
 
-1. **API Keys** - Store all API keys in environment variables
-2. **Webhook Security** - Consider adding webhook signature validation
-3. **Database** - Use strong passwords and restrict access
-4. **Rate Limiting** - Configure rate limits on webhook endpoint
-5. **Logging** - Sensitive data is not logged
+1. **API Keys** - Store all API keys in environment variables, never commit to git
+2. **Webhook Authentication** - All webhook endpoints (except /health) require API key authentication via:
+   - `X-API-Key` HTTP header (recommended), or
+   - `apiKey` query parameter
+3. **Spring Security** - Stateless API key authentication filter protects all endpoints
+4. **Database** - Use strong passwords and restrict access
+5. **Rate Limiting** - Consider adding rate limits on webhook endpoint if needed
+6. **Logging** - Sensitive data is not logged
+7. **HTTPS** - Always use HTTPS in production to protect API keys in transit
 
 ## Monitoring
 
