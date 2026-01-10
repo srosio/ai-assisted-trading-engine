@@ -6,7 +6,15 @@
 
 Receive TradingView webhook with market event.
 
-**Request Body:**
+**Authentication:** Required via `X-API-Key` header or `apiKey` query parameter
+
+**Request Headers:**
+```
+Content-Type: application/json
+X-API-Key: your-secret-api-key
+```
+
+**Request Body (camelCase):**
 ```json
 {
   "symbol": "BTCUSDT",
@@ -14,30 +22,33 @@ Receive TradingView webhook with market event.
   "event": "liquidity_sweep_long",
   "session": "NY",
   "price": 43120.50,
-  "previous_day_high": 43210.00,
-  "previous_day_low": 42880.00,
-  "volume_spike": true,
-  "displacement_detected": true,
-  "htf_bias": "bullish"
+  "previousDayHigh": 43210.00,
+  "previousDayLow": 42880.00,
+  "volumeSpike": true,
+  "displacementDetected": true,
+  "htfBias": "bullish"
 }
 ```
 
-**Response:**
+**Response (camelCase):**
 ```json
 {
   "success": true,
-  "signal_id": "550e8400-e29b-41d4-a716-446655440000",
+  "signalId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "VALID",
   "action": "Monitor per trading plan",
-  "setup_quality": "A",
-  "rules_passed": true
+  "setupQuality": "A",
+  "rulesPassed": true
 }
 ```
 
 **Status Codes:**
 - 200: Success
+- 401: Unauthorized (invalid or missing API key)
 - 400: Invalid request (validation error)
 - 500: Server error
+
+**Important:** Telegram notifications are sent ONLY when status is `VALID`. All signals are journaled regardless.
 
 ---
 
@@ -67,9 +78,27 @@ Test endpoint for manual signal testing (development only).
 
 ## Example cURL Commands
 
-### Send Test Signal
+### Send Test Signal (with API Key)
 ```bash
 curl -X POST http://localhost:8080/api/webhook/tradingview \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-secret-api-key" \
+  -d '{
+    "symbol": "BTCUSDT",
+    "timeframe": "5m",
+    "event": "liquidity_sweep_long",
+    "session": "NY",
+    "price": 43120.50,
+    "previousDayHigh": 43210.00,
+    "previousDayLow": 42880.00,
+    "volumeSpike": true,
+    "htfBias": "bullish"
+  }'
+```
+
+### Alternative: Using Query Parameter
+```bash
+curl -X POST "http://localhost:8080/api/webhook/tradingview?apiKey=your-secret-api-key" \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "BTCUSDT",
@@ -77,14 +106,14 @@ curl -X POST http://localhost:8080/api/webhook/tradingview \
     "event": "liquidity_sweep_long",
     "session": "NY",
     "price": 43120.50,
-    "previous_day_high": 43210.00,
-    "previous_day_low": 42880.00,
-    "volume_spike": true,
-    "htf_bias": "bullish"
+    "previousDayHigh": 43210.00,
+    "previousDayLow": 42880.00,
+    "volumeSpike": true,
+    "htfBias": "bullish"
   }'
 ```
 
-### Health Check
+### Health Check (no authentication)
 ```bash
 curl http://localhost:8080/api/webhook/health
 ```
@@ -137,25 +166,37 @@ Consider implementing rate limiting based on your needs:
 
 ## Security
 
-### Webhook Signature Verification (Recommended)
+### API Key Authentication (Implemented)
 
-To secure the webhook endpoint, implement signature verification:
+All webhook endpoints (except `/health`) require API key authentication via Spring Security:
 
-1. Generate a secret key
-2. Have TradingView sign the payload with the secret
-3. Verify the signature on each request
-
-Example:
-```java
-@PostMapping("/tradingview")
-public ResponseEntity<?> receiveTradingViewWebhook(
-        @RequestBody TradingViewWebhook webhook,
-        @RequestHeader("X-Webhook-Signature") String signature) {
-
-    if (!verifySignature(webhook, signature)) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-    }
-
-    // Process webhook...
-}
+**Configuration:**
+Set the `WEBHOOK_API_KEY` environment variable:
+```bash
+export WEBHOOK_API_KEY=your-secure-random-key
 ```
+
+**Two Authentication Methods:**
+
+1. **HTTP Header (Recommended):**
+```bash
+curl -H "X-API-Key: your-secret-api-key" ...
+```
+
+2. **Query Parameter:**
+```bash
+curl "http://localhost:8080/api/webhook/tradingview?apiKey=your-secret-api-key" ...
+```
+
+**Security Features:**
+- ✅ Stateless authentication (no sessions)
+- ✅ Spring Security integration
+- ✅ All endpoints protected except health check
+- ✅ 401 Unauthorized response for invalid keys
+
+**Best Practices:**
+1. Use strong, random API keys (min 32 characters)
+2. Rotate keys periodically
+3. Never commit keys to git
+4. Use HTTPS in production
+5. Store keys in environment variables only

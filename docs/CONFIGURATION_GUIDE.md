@@ -107,15 +107,14 @@ trading:
   max-risk-percent: 1.0
   default-risk-percent: 1.0
   min-risk-reward-ratio: 3.0
-  max-trades-per-day: 2
   max-daily-loss-r: 2.0
 ```
 
 **Explanation:**
 - **Risk per trade:** 0.5% - 1.0% of account
 - **R:R ratio:** Minimum 1:3 (risk 1 to make 3)
-- **Max trades:** 2 per day (prevents overtrading)
 - **Daily loss limit:** -2R maximum (stops trading after -2R loss)
+- **No trade limit:** Take as many quality setups as appear
 
 **These cannot be overridden by AI or manual intervention.**
 
@@ -285,24 +284,52 @@ If validation fails, the application will not start.
 
 ---
 
+### 7. Webhook Security
+
+```yaml
+webhook:
+  api:
+    key: ${WEBHOOK_API_KEY}
+```
+
+**Environment Variable:**
+- `WEBHOOK_API_KEY` - Secret key for webhook authentication
+
+All webhook endpoints (except `/health`) require authentication via:
+- `X-API-Key` HTTP header (recommended), or
+- `apiKey` query parameter
+
+---
+
+### 8. Notification Behavior
+
+**Telegram notifications are sent ONLY for confirmed trades:**
+- Status must be `VALID` (all rules passed, can trade)
+- Invalid/blocked signals are journaled but not notified
+- Reduces noise - you only get alerts for actionable setups
+
+**All signals are logged to database regardless of notification status.**
+
+---
+
 ## Tuning Recommendations
 
 ### Conservative Settings (Recommended for Beginners)
 ```yaml
 trading:
   default-risk-percent: 0.5
-  max-trades-per-day: 1
   allow-b-quality: false
   require-htf-alignment: true
+  block-high-volatility: true
 ```
 
 ### Aggressive Settings (Experienced Traders Only)
 ```yaml
 trading:
   default-risk-percent: 1.0
-  max-trades-per-day: 2
   allow-b-quality: true
   require-htf-alignment: false
+  block-high-volatility: false
 ```
 
 ### Safe Testing
@@ -310,9 +337,8 @@ trading:
 trading:
   account-balance: 100  # Small test size
   default-risk-percent: 0.5
-  max-trades-per-day: 5
-  telegram:
-    enabled: true
+telegram:
+  enabled: true
 ```
 
 ---
@@ -348,7 +374,7 @@ trading:
 - Review `trading` configuration
 - Check if sessions are enabled
 - Verify quality settings
-- Check daily trade limit
+- Check daily loss limit hasn't been exceeded
 
 ---
 

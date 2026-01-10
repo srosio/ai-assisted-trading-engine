@@ -294,8 +294,7 @@ trading:
   max-risk-percent: 1.0
   default-risk-percent: 1.0
   min-risk-reward-ratio: 3.0
-  max-trades-per-day: 2
-  max-daily-loss-r: 2.0
+  max-daily-loss-r: 2.0  # Max -2R loss per day
 
   # Account
   account-balance: 10000
@@ -319,6 +318,9 @@ trading:
 
   # Open Interest
   min-oi-change-percent: 2.0
+
+# Note: No trade limit - take as many quality setups as appear
+# Telegram notifications sent ONLY for confirmed trades (VALID status)
 ```
 
 ## Signal Processing Pipeline
