@@ -77,7 +77,7 @@ public class NotificationService extends TelegramLongPollingBot {
         return sb.toString();
     }
 
-    public void sendMessage(final String text) {
+    private void sendMessage(final String text) {
         final var message = new SendMessage();
         message.setChatId(telegramConfig.getChatId());
         message.setText(text);
