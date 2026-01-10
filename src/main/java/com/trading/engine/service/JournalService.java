@@ -1,6 +1,7 @@
 package com.trading.engine.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.trading.engine.config.TradingConfig;
 import com.trading.engine.domain.JournalEntry;
 import com.trading.engine.domain.TradeSignal;
@@ -22,7 +23,7 @@ public class JournalService {
 
     private final JournalEntryRepository journalRepository;
     private final TradingConfig tradingConfig;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Transactional
     public JournalEntry createEntry(final TradeSignal signal) {
