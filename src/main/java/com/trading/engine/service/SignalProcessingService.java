@@ -40,6 +40,7 @@ public class SignalProcessingService {
 
             log.info("Step 2: Requesting AI analysis");
             final var assessment = aiAnalysis.analyzeContext(context);
+            log.info("AI analysis result: {}", assessment);
 
             log.info("Step 3: Validating against rules");
             final var ruleResult = ruleEngine.validateSetup(context, assessment);

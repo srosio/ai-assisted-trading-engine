@@ -23,7 +23,6 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
         jdbc:
           time_zone: UTC
 
@@ -60,14 +59,14 @@ logging:
     com.trading.engine: DEBUG
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+#  pattern:
+#    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
 
 # Claude AI Configuration
 claude:
   api-key: ${CLAUDE_API_KEY:mock-key}
   api-url: https://api.anthropic.com/v1/messages
-  model: claude-3-5-sonnet-20241022
+  model: claude-sonnet-4-5-20250929
   max-tokens: 1024
   temperature: 0.3
   timeout-seconds: 30
