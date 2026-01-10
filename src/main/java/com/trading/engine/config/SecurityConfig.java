@@ -23,9 +23,6 @@ import java.io.IOException;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Value("${webhook.api.key:}")
-    private String webhookApiKey;
-
     @Bean
     public SecurityFilterChain securityFilterChain(
             final HttpSecurity http,

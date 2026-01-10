@@ -20,7 +20,7 @@ public class WebhookController {
     private final SignalProcessingService signalProcessor;
 
     @PostMapping("/tradingview")
-    public ResponseEntity<Map<String, Object>> receiveTradingViewWebhook(
+    public ResponseEntity<?> receiveTradingViewWebhook(
             @Valid @RequestBody final TradingViewWebhook webhook) {
 
         log.info("Received TradingView webhook - Symbol: {}, Event: {}, Session: {}",
@@ -69,7 +69,7 @@ public class WebhookController {
     }
 
     @PostMapping("/test")
-    public ResponseEntity<Map<String, Object>> testSignal(
+    public ResponseEntity<?> testSignal(
             @RequestBody final TradingViewWebhook webhook) {
 
         log.info("Test signal received - Symbol: {}, Event: {}",
