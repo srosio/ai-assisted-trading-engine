@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Service
 @RequiredArgsConstructor
@@ -63,7 +64,7 @@ public class ContextBuilderService {
         } else {
             final var range = pdHigh.subtract(pdLow);
             final var position = price.subtract(pdLow);
-            final var percentage = position.divide(range, 2, BigDecimal.ROUND_HALF_UP)
+            final var percentage = position.divide(range, 2, RoundingMode.HALF_UP)
                     .multiply(new BigDecimal("100"));
 
             if (percentage.compareTo(new BigDecimal("66")) > 0) {
