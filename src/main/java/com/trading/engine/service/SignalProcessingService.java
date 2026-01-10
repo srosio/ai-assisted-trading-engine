@@ -57,8 +57,13 @@ public class SignalProcessingService {
             log.info("Step 6: Creating journal entry");
             journalService.createEntry(signal);
 
-            log.info("Step 7: Sending notification");
-            notificationService.sendSignalNotification(signal);
+            // Only send notification for confirmed trades (VALID status means can trade)
+            if ("VALID".equals(signal.getStatus())) {
+                log.info("Step 7: Sending notification for confirmed trade");
+                notificationService.sendSignalNotification(signal);
+            } else {
+                log.info("Step 7: Skipping notification - Trade not confirmed (status: {})", signal.getStatus());
+            }
 
             log.info("Signal processing complete - Status: {}", signal.getStatus());
             return signal;

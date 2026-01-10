@@ -17,7 +17,6 @@ public class TradingConfig {
     private BigDecimal defaultRiskPercent = new BigDecimal("1.0");
 
     private BigDecimal minRiskRewardRatio = new BigDecimal("3.0");
-    private Integer maxTradesPerDay = 2;
     private BigDecimal maxDailyLossR = new BigDecimal("2.0"); // Max 2R loss per day
 
     // Account

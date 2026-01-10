@@ -32,8 +32,6 @@ public class RuleEngineService {
 
         validateSession(context.getSession(), result);
 
-        validateMaxTrades(result);
-
         validateDailyLoss(result);
 
         validateOpenInterest(context.getOiChangePercent(), result);
@@ -111,18 +109,6 @@ public class RuleEngineService {
         }
     }
 
-    private void validateMaxTrades(final RuleResult result) {
-        final var todayCount = journalService.getTodayTradeCount();
-
-        if (todayCount < tradingConfig.getMaxTradesPerDay()) {
-            result.addPassedRule(String.format("Trades today (%d) below max (%d)",
-                    todayCount, tradingConfig.getMaxTradesPerDay()));
-        } else {
-            result.addFailedRule(String.format("Max trades per day reached (%d/%d)",
-                    todayCount, tradingConfig.getMaxTradesPerDay()));
-        }
-    }
-
     private void validateDailyLoss(final RuleResult result) {
         final var withinLimit = journalService.isDailyLossWithinLimit();
 
@@ -179,11 +165,8 @@ public class RuleEngineService {
             default -> false;
         };
 
-        final var todayCount = journalService.getTodayTradeCount();
-        final var tradesOk = todayCount < tradingConfig.getMaxTradesPerDay();
-
         final var lossOk = journalService.isDailyLossWithinLimit();
 
-        return sessionOk && tradesOk && lossOk;
+        return sessionOk && lossOk;
     }
 }
