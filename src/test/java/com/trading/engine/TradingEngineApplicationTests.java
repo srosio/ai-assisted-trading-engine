@@ -1,10 +1,10 @@
-package com.sweepagent.aiassistedtradingengine;
+package com.trading.engine;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class AiAssistedTradingEngineApplicationTests {
+class TradingEngineApplicationTests {
 
     @Test
     void contextLoads() {
