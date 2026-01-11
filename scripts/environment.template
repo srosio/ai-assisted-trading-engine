@@ -1,0 +1,31 @@
+# AI Trading Engine Environment Configuration
+# Copy this file to /etc/ai-trading-engine/environment and configure
+
+# Webhook API Security
+WEBHOOK_API_KEY=your-secure-webhook-api-key-change-this
+
+# Claude AI Configuration
+CLAUDE_API_KEY=your-claude-api-key-here
+
+# Binance API Configuration
+BINANCE_API_KEY=your-binance-api-key-here
+BINANCE_API_SECRET=your-binance-api-secret-here
+
+# Telegram Configuration
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token-here
+TELEGRAM_CHAT_ID=your-telegram-chat-id-here
+
+# Database Configuration
+DB_PASSWORD=your-postgresql-password-here
+
+# Redis Configuration (if password protected)
+REDIS_PASSWORD=
+
+# Trading Configuration
+ACCOUNT_BALANCE=10000
+
+# Spring Profile (production, staging, dev)
+SPRING_PROFILES_ACTIVE=production
+
+# JVM Options (optional overrides)
+JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC
