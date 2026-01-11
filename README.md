@@ -160,48 +160,104 @@ For actual trading with real market data - see [Setup Instructions](#setup-instr
 ## Project Structure
 
 ```
-src/main/java/com/trading/engine/
-├── controller/
-│   └── WebhookController.java          # Webhook endpoint
-├── service/
-│   ├── IngressService.java             # Time alignment, deduplication
-│   ├── MarketDataService.java          # Binance comprehensive data
-│   ├── IntradayContextEngine.java      # Deterministic analysis
-│   ├── ContextBuilderService.java      # Build market context
-│   ├── AiAnalysisService.java          # Claude AI (assessment + execution plan)
-│   ├── RuleEngineService.java          # Hard validation rules
-│   ├── ExecutionAdvisoryService.java   # Pre-execution checklist
-│   ├── NotificationService.java        # Telegram alerts
-│   ├── JournalService.java             # Trade logging
-│   └── SignalProcessingService.java    # Main orchestration
-├── domain/
-│   ├── TradingViewWebhook.java         # Webhook payload
-│   ├── MarketContext.java              # Market data snapshot
-│   ├── IntradayContext.java            # Intraday deterministic analysis
-│   ├── AiAssessment.java               # AI quality assessment
-│   ├── ExecutionPlan.java              # AI execution plan
-│   ├── ExecutionChecklist.java         # Pre-execution readiness
-│   ├── RuleResult.java                 # Validation result
-│   ├── TradeSignal.java                # Complete signal
-│   └── JournalEntry.java               # Persistent record
-├── config/
-│   ├── SpringAiConfig.java             # Spring AI & Anthropic setup
-│   ├── SecurityConfig.java             # API key authentication
-│   ├── ClaudeConfig.java               # Claude API config
-│   ├── BinanceConfig.java              # Binance config
-│   ├── TelegramConfig.java             # Telegram config
-│   └── TradingConfig.java              # Trading rules (NON-NEGOTIABLE)
-└── repository/
-    └── JournalEntryRepository.java     # Database access
+ai-assisted-trading-engine/
+├── src/main/java/com/trading/engine/
+│   ├── controller/
+│   │   └── WebhookController.java          # Webhook endpoint
+│   ├── service/
+│   │   ├── IngressService.java             # Time alignment, deduplication
+│   │   ├── MarketDataService.java          # Binance comprehensive data
+│   │   ├── IntradayContextEngine.java      # Deterministic analysis
+│   │   ├── ContextBuilderService.java      # Build market context
+│   │   ├── AiAnalysisService.java          # Claude AI (assessment + execution plan)
+│   │   ├── RuleEngineService.java          # Hard validation rules
+│   │   ├── ExecutionAdvisoryService.java   # Pre-execution checklist
+│   │   ├── NotificationService.java        # Telegram alerts
+│   │   ├── JournalService.java             # Trade logging
+│   │   └── SignalProcessingService.java    # Main orchestration
+│   ├── domain/
+│   │   ├── TradingViewWebhook.java         # Webhook payload
+│   │   ├── MarketContext.java              # Market data snapshot
+│   │   ├── IntradayContext.java            # Intraday deterministic analysis
+│   │   ├── AiAssessment.java               # AI quality assessment
+│   │   ├── ExecutionPlan.java              # AI execution plan
+│   │   ├── ExecutionChecklist.java         # Pre-execution readiness
+│   │   ├── RuleResult.java                 # Validation result
+│   │   ├── TradeSignal.java                # Complete signal
+│   │   └── JournalEntry.java               # Persistent record
+│   ├── config/
+│   │   ├── SpringAiConfig.java             # Spring AI & Anthropic setup
+│   │   ├── SecurityConfig.java             # API key authentication
+│   │   ├── ClaudeConfig.java               # Claude API config
+│   │   ├── BinanceConfig.java              # Binance config
+│   │   ├── TelegramConfig.java             # Telegram config
+│   │   └── TradingConfig.java              # Trading rules (NON-NEGOTIABLE)
+│   └── repository/
+│       └── JournalEntryRepository.java     # Database access
+├── scripts/                                 # Linux service deployment
+│   ├── ai-trading-engine.service           # Systemd service file
+│   ├── environment.template                # Environment config template
+│   ├── install-service.sh                  # Automated installer
+│   ├── uninstall-service.sh                # Service removal
+│   ├── start.sh                            # Start service
+│   ├── stop.sh                             # Stop service
+│   ├── restart.sh                          # Restart service
+│   ├── status.sh                           # Check status
+│   └── logs.sh                             # View logs
+├── docs/                                   # Documentation
+│   ├── SERVICE_DEPLOYMENT.md               # Linux service deployment guide
+│   ├── CONFIGURATION_GUIDE.md              # Configuration reference
+│   ├── API_ENDPOINTS.md                    # API documentation
+│   └── PINE_SCRIPT_*.pine                  # TradingView strategy examples
+└── build.gradle                            # Build configuration
 ```
 
-## Setup Instructions
+## Deployment Options
 
 Choose your deployment method:
-- **☁️ Cloud (Recommended):** Deploy to Fly.io in 5 minutes → [Fly.io Guide](docs/FLYIO_DEPLOYMENT.md)
-- **💻 Local Development:** Run on your machine → Instructions below
 
-### Local Development Setup
+### 🐧 Linux Production Server (Recommended)
+Deploy as a systemd service on any Linux server (Ubuntu, Debian, RHEL, CentOS, etc.)
+
+**Quick Install:**
+```bash
+# Build application
+./gradlew build
+
+# Install as service
+sudo ./scripts/install-service.sh
+
+# Configure API keys
+sudo nano /etc/ai-trading-engine/environment
+
+# Enable and start
+sudo systemctl enable ai-trading-engine
+sudo trading-start
+```
+
+**Features:**
+- ✅ Runs as systemd service with auto-restart
+- ✅ Secure environment variable configuration
+- ✅ Global management commands (trading-start, trading-stop, trading-logs)
+- ✅ Automatic logging to systemd journal
+- ✅ Resource limits and security hardening
+- ✅ Starts automatically on server boot
+
+**See:** [Complete Linux Service Deployment Guide →](docs/SERVICE_DEPLOYMENT.md)
+
+---
+
+### ☁️ Cloud Deployment
+Deploy to cloud platforms for production use:
+- **Fly.io:** Deploy in 5 minutes → [Fly.io Guide](docs/FLYIO_DEPLOYMENT.md)
+- **AWS/GCP/Azure:** Use containerized deployment (Docker)
+
+---
+
+### 💻 Local Development
+Run on your development machine for testing:
+
+## Local Development Setup
 
 #### 1. Prerequisites
 
@@ -519,20 +575,144 @@ Test signal processing (for development)
 6. **Logging** - Sensitive data is not logged
 7. **HTTPS** - Always use HTTPS in production to protect API keys in transit
 
+## Service Management (Linux)
+
+If deployed as a systemd service (see [Linux Deployment Guide](docs/SERVICE_DEPLOYMENT.md)):
+
+### Quick Commands
+
+```bash
+# Start service
+sudo trading-start
+
+# Stop service
+sudo trading-stop
+
+# Restart service
+sudo trading-restart
+
+# Check status
+sudo trading-status
+
+# View live logs
+sudo trading-logs
+```
+
+### Using systemctl Directly
+
+```bash
+# Start/stop/restart
+sudo systemctl start ai-trading-engine
+sudo systemctl stop ai-trading-engine
+sudo systemctl restart ai-trading-engine
+
+# Enable/disable auto-start on boot
+sudo systemctl enable ai-trading-engine
+sudo systemctl disable ai-trading-engine
+
+# Check status
+sudo systemctl status ai-trading-engine
+
+# View logs
+sudo journalctl -u ai-trading-engine -f
+
+# View logs since today
+sudo journalctl -u ai-trading-engine --since today
+```
+
+### Service Locations
+
+- **Application:** `/opt/ai-trading-engine/`
+- **Configuration:** `/etc/ai-trading-engine/environment`
+- **Logs:** `/var/log/ai-trading-engine/` + systemd journal
+- **Service file:** `/etc/systemd/system/ai-trading-engine.service`
+
 ## Monitoring
+
+### Application Monitoring
 
 Monitor the logs for:
 - Webhook reception
-- AI analysis results
+- Intraday context analysis (confidence scores)
+- AI analysis results (quality ratings)
+- Execution plan generation
+- Pre-execution checklist results
 - Rule validation failures
-- Risk limit violations
 - Database writes
 - Telegram delivery
 
+### System Monitoring (Linux Service)
+
+```bash
+# Real-time logs
+sudo trading-logs
+
+# Check service health
+sudo trading-status
+
+# View last 100 log lines
+sudo journalctl -u ai-trading-engine -n 100
+
+# Search for errors
+sudo journalctl -u ai-trading-engine | grep -i error
+
+# Check resource usage
+sudo systemctl status ai-trading-engine
+```
+
+### Health Check Endpoint
+
+```bash
+# Check application health
+curl http://localhost:8080/api/webhook/health
+```
+
+Expected response:
+```json
+{
+  "status": "UP",
+  "service": "AI-Assisted Trading Engine"
+}
+```
+
 ## Troubleshooting
+
+### Service Won't Start (Linux)
+
+```bash
+# Check service status
+sudo trading-status
+
+# View recent logs
+sudo journalctl -u ai-trading-engine -n 50
+
+# Verify JAR file exists
+ls -lh /opt/ai-trading-engine/ai-assisted-trading-engine.jar
+
+# Check configuration
+sudo cat /etc/ai-trading-engine/environment
+```
+
+**See:** [Complete Troubleshooting Guide](docs/SERVICE_DEPLOYMENT.md#troubleshooting)
+
+### Low Confidence Signals
+
+If signals are frequently blocked due to low confidence:
+- Check intraday context logs for specific issues
+- Review OI+price behavior classification
+- Verify volume confirmation logic
+- Adjust confidence threshold in `SignalProcessingService.java` (default: 60/100)
 
 ### AI Analysis Fails
 The system creates a fallback assessment with quality "C" and requires manual review.
+
+### Execution Checklist Blocking Trades
+
+If pre-execution checklist frequently blocks trades:
+- Check spread (should be ≤5 bps)
+- Verify funding rate (should be ≤1%)
+- Review order book imbalance
+- Check logs for specific blocker messages
 
 ### Rules Block Everything
 Check your trading config - you may have sessions disabled or strict quality requirements.
@@ -540,8 +720,10 @@ Check your trading config - you may have sessions disabled or strict quality req
 ### No Telegram Notifications
 Verify bot token and chat ID are correct. Check logs for Telegram API errors.
 
+**Note:** Notifications only sent for VALID trades (passed all checks including confidence threshold, rules, and execution checklist).
+
 ### Database Connection Issues
-Ensure PostgreSQL is running and credentials are correct in application.yml.
+Ensure PostgreSQL is running and credentials are correct in application.yml or environment file.
 
 ## Development
 
@@ -558,10 +740,14 @@ docker build -t trading-engine:latest .
 ## Important Notes
 
 1. **This system does NOT auto-trade** - It assists human decision-making
-2. **All trades require human confirmation** - The system provides analysis, not orders
-3. **AI constraints are hardcoded** - Cannot be bypassed without code changes
-4. **Risk rules are non-negotiable** - Enforced at the code level
-5. **Everything is journaled** - For accountability and learning
+2. **All trades require human confirmation** - The system provides execution plans, not automatic orders
+3. **Production deployment** - Use Linux systemd service for 24/7 operation (see [Deployment Guide](docs/SERVICE_DEPLOYMENT.md))
+4. **Comprehensive analysis** - Multi-layered intraday context engine with confidence scoring
+5. **Pre-execution validation** - Automatic checklist for spread, funding, volatility, and liquidity
+6. **AI constraints are hardcoded** - Cannot be bypassed without code changes
+7. **Risk rules are non-negotiable** - Enforced at the code level
+8. **Everything is journaled** - For accountability and learning
+9. **Security hardened** - Runs as unprivileged user, environment-based secrets, systemd security features
 
 ## License
 
