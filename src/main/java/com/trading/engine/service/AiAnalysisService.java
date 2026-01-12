@@ -53,14 +53,26 @@ public class AiAnalysisService {
             final var contextJson = objectMapper.writeValueAsString(compactContext);
             final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
 
-            // Concise prompt focused on Pine Script event analysis
+            // Strategy-specific prompt based on documented Pine Script strategies
+            final var strategyContext = getStrategyContext(webhook.getEvent());
             final var userMessage = String.format("""
-                    Analyze Pine Script alert: Assess setup based on detected event, swept levels, volume/displacement signals. Identify risks, classify quality (A/B/C).
+                    Analyze Pine Script %s strategy alert:
+
+                    Strategy profile: %s
+                    Expected: %s
+
+                    Assess setup quality based on swept levels, volume/displacement, and market context.
+                    Identify risks that could reduce win rate below expected %.
+                    Classify: A (all criteria met), B (good but minor concerns), C (reject).
 
                     %s
 
                     %s
-                    """, contextJson, outputConverter.getFormat());
+                    """, strategyContext.get("name"),
+                         strategyContext.get("profile"),
+                         strategyContext.get("expected"),
+                         contextJson,
+                         outputConverter.getFormat());
 
             final var response = chatClient.prompt()
                     .user(userMessage)
@@ -79,6 +91,60 @@ public class AiAnalysisService {
             log.error("Error getting AI analysis: {}", e.getMessage(), e);
             return createFallbackAssessment(e.getMessage());
         }
+    }
+
+    /**
+     * Get strategy-specific context based on Pine Script strategy type
+     */
+    private java.util.Map<String, String> getStrategyContext(final String event) {
+        final var eventLower = event.toLowerCase();
+
+        // High Win Rate Scalping (70-80% WR, 1:1-1:2 R:R)
+        if (eventLower.contains("scalping") || eventLower.contains("bb_extreme") ||
+            eventLower.contains("mean_reversion")) {
+            return java.util.Map.of(
+                "name", "High Win Rate Scalping",
+                "profile", "70-80% WR, 1:1-1:2 R:R, mean reversion at extremes",
+                "expected", "Tight BB squeeze, RSI extreme, clear support/resistance for reversal"
+            );
+        }
+
+        // Medium Win Rate Swing (50-60% WR, 1:2-1:4 R:R)
+        if (eventLower.contains("swing") || eventLower.contains("pullback") ||
+            eventLower.contains("fib_retracement")) {
+            return java.util.Map.of(
+                "name", "Medium Win Rate Swing",
+                "profile", "50-60% WR, 1:2-1:4 R:R, trend continuation",
+                "expected", "Clear trend, pullback to key level (Fib/MA), continuation setup"
+            );
+        }
+
+        // Low Win Rate Breakout (30-40% WR, 1:5-1:10+ R:R)
+        if (eventLower.contains("breakout") || eventLower.contains("consolidation_break") ||
+            eventLower.contains("range_break")) {
+            return java.util.Map.of(
+                "name", "Low Win Rate Breakout",
+                "profile", "30-40% WR, 1:5-1:10+ R:R, explosive moves",
+                "expected", "Tight consolidation, volume surge, momentum confirmation"
+            );
+        }
+
+        // Adaptive Strategy (40-60% WR, 1:2-1:4 R:R)
+        if (eventLower.contains("adaptive") || eventLower.contains("regime") ||
+            eventLower.contains("multi_strategy")) {
+            return java.util.Map.of(
+                "name", "Adaptive Strategy",
+                "profile", "40-60% WR, 1:2-1:4 R:R, regime-aware",
+                "expected", "Clear regime identification, appropriate entry for market condition"
+            );
+        }
+
+        // Liquidity Sweep (45-55% WR, 1:3-1:5 R:R) - Default/Original
+        return java.util.Map.of(
+            "name", "Liquidity Sweep",
+            "profile", "45-55% WR, 1:3-1:5 R:R, liquidity grab reversal",
+            "expected", "Equal highs/lows swept, displacement reversal, clear invalidation"
+        );
     }
 
     private void validateAssessment(final AiAssessment assessment) {
@@ -164,14 +230,28 @@ public class AiAnalysisService {
             final var contextJson = objectMapper.writeValueAsString(ctx);
             final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
 
-            // Concise execution planner prompt with Pine Script event focus
+            // Strategy-specific execution planning
+            final var strategyContext = getStrategyContext(webhook.getEvent());
             final var userMessage = String.format("""
-                    Plan execution based on Pine Script alert: model (market/limit/scale-in), entry zone near swept levels, stop logic+price, targets (R multiples), invalidations, risks.
+                    Plan execution for Pine Script %s strategy:
+
+                    Target profile: %s
+
+                    Generate plan: entry model, zone near swept levels, stop (match strategy risk), targets (match expected R:R), invalidations.
+
+                    For Scalping: Tight stops, quick 1-2R targets
+                    For Swing: Wider stops, 2-4R targets
+                    For Breakout: Inside range stops, 5-10R+ targets
+                    For Adaptive: Match regime (tight for range, wide for trend)
+                    For Liquidity: Beyond swept level, 3-5R targets
 
                     %s
 
                     %s
-                    """, contextJson, outputConverter.getFormat());
+                    """, strategyContext.get("name"),
+                         strategyContext.get("profile"),
+                         contextJson,
+                         outputConverter.getFormat());
 
             final var response = chatClient.prompt()
                     .user(userMessage)
