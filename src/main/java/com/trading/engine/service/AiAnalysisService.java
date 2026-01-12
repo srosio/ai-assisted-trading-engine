@@ -24,9 +24,12 @@ public class AiAnalysisService {
 
     private final ChatClient chatClient;
     private final ClaudeConfig claudeConfig;
+    private final StaticAnalysisService staticAnalysis;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    public AiAssessment analyzeContext(final MarketContext context, final TradingViewWebhook webhook) {
+    public AiAssessment analyzeContext(final MarketContext context,
+                                        final TradingViewWebhook webhook,
+                                        final IntradayContext intradayContext) {
         log.info("Requesting AI analysis for {} - Pine Script Event: {}", context.getSymbol(), webhook.getEvent());
 
         try {
@@ -62,7 +65,7 @@ public class AiAnalysisService {
                     Expected: %s
 
                     Assess setup quality based on swept levels, volume/displacement, and market context.
-                    Identify risks that could reduce win rate below expected %.
+                    Identify risks that could reduce win rate below expected %%.
                     Classify: A (all criteria met), B (good but minor concerns), C (reject).
 
                     %s
@@ -88,8 +91,8 @@ public class AiAnalysisService {
             return assessment;
 
         } catch (final Exception e) {
-            log.error("Error getting AI analysis: {}", e.getMessage(), e);
-            return createFallbackAssessment(e.getMessage());
+            log.warn("AI unavailable, using static analysis: {}", e.getMessage());
+            return staticAnalysis.generateStaticAssessment(context, intradayContext, webhook);
         }
     }
 
@@ -267,8 +270,11 @@ public class AiAnalysisService {
             return executionPlan;
 
         } catch (final Exception e) {
-            log.error("Error generating execution plan: {}", e.getMessage(), e);
-            return createFallbackExecutionPlan(context, direction);
+            log.warn("AI unavailable for execution plan, using static analysis: {}", e.getMessage());
+            final var strategyContext = getStrategyContext(webhook.getEvent());
+            return staticAnalysis.generateStaticExecutionPlan(
+                    context, intradayContext, webhook, direction, strategyContext.get("name")
+            );
         }
     }
 
