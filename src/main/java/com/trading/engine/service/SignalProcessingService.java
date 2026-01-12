@@ -62,9 +62,9 @@ public class SignalProcessingService {
                 return signal;
             }
 
-            // Step 3: AI Trade Analysis
-            log.info("Step 3: Requesting AI setup assessment");
-            final var assessment = aiAnalysis.analyzeContext(context);
+            // Step 3: AI Trade Analysis (based on Pine Script events)
+            log.info("Step 3: Requesting AI setup assessment for Pine Script event: {}", webhook.getEvent());
+            final var assessment = aiAnalysis.analyzeContext(context, webhook);
             log.info("AI assessment: Quality {}, Alignment {}/100",
                     assessment.getSetupQuality(), assessment.getAlignmentScore());
 
@@ -72,13 +72,13 @@ public class SignalProcessingService {
             log.info("Step 4: Validating against trading rules");
             final var ruleResult = ruleEngine.validateSetup(context, assessment);
 
-            // Step 5: Generate execution plan (if rules pass)
-            log.info("Step 5: Generating execution plan");
+            // Step 5: Generate execution plan (if rules pass) based on Pine Script event
+            log.info("Step 5: Generating execution plan based on Pine Script event");
             final var direction = determineDirection(webhook.getEvent());
             ExecutionPlan executionPlan = null;
 
             if (ruleResult.isPassed() && !assessment.getSetupQuality().equals("C")) {
-                executionPlan = aiAnalysis.generateExecutionPlan(context, intradayContext, direction);
+                executionPlan = aiAnalysis.generateExecutionPlan(context, intradayContext, webhook, direction);
                 log.info("Execution plan: {} - {} targets",
                         executionPlan.getExecutionModel(),
                         executionPlan.getTargets() != null ? executionPlan.getTargets().size() : 0);
