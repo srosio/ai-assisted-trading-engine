@@ -64,7 +64,7 @@ public class SignalProcessingService {
 
             // Step 3: AI Trade Analysis (based on Pine Script events)
             log.info("Step 3: Requesting AI setup assessment for Pine Script event: {}", webhook.getEvent());
-            final var assessment = aiAnalysis.analyzeContext(context, webhook);
+            final var assessment = aiAnalysis.analyzeContext(context, webhook, intradayContext);
             log.info("AI assessment: Quality {}, Alignment {}/100",
                     assessment.getSetupQuality(), assessment.getAlignmentScore());
 
