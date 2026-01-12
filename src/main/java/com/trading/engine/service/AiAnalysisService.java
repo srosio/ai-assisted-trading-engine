@@ -7,6 +7,7 @@ import com.trading.engine.domain.AiAssessment;
 import com.trading.engine.domain.ExecutionPlan;
 import com.trading.engine.domain.IntradayContext;
 import com.trading.engine.domain.MarketContext;
+import com.trading.engine.domain.TradingViewWebhook;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -25,30 +26,36 @@ public class AiAnalysisService {
     private final ClaudeConfig claudeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    public AiAssessment analyzeContext(final MarketContext context) {
-        log.info("Requesting AI analysis for {} - Event: {}", context.getSymbol(), context.getLiquidityEvent());
+    public AiAssessment analyzeContext(final MarketContext context, final TradingViewWebhook webhook) {
+        log.info("Requesting AI analysis for {} - Pine Script Event: {}", context.getSymbol(), webhook.getEvent());
 
         try {
-            // Build compact context with only essential fields
+            // Build compact context with Pine Script event data
             final var compactContext = objectMapper.createObjectNode();
+
+            // Pine Script event data (primary analysis focus)
+            compactContext.put("event", webhook.getEvent());
+            compactContext.put("tf", webhook.getTimeframe());
+            compactContext.put("sweptHigh", webhook.getSweptHigh());
+            compactContext.put("sweptLow", webhook.getSweptLow());
+            compactContext.put("volSpike", webhook.getVolumeSpike());
+            compactContext.put("displ", webhook.getDisplacementDetected());
+
+            // Market context (supporting data)
             compactContext.put("sym", context.getSymbol());
-            compactContext.put("event", context.getLiquidityEvent());
             compactContext.put("px", context.getCurrentPrice());
             compactContext.put("htf", context.getHtfBias());
-            compactContext.put("loc", context.getLocation());
             compactContext.put("sess", context.getSession());
             compactContext.put("oiChg", context.getOiChangePercent());
             compactContext.put("fund", context.getFundingRate());
             compactContext.put("vol", context.getVolatility());
-            compactContext.put("volSpike", context.getVolumeSpike());
-            compactContext.put("displ", context.getDisplacementDetected());
 
             final var contextJson = objectMapper.writeValueAsString(compactContext);
             final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
 
-            // Concise prompt - analyst role only
+            // Concise prompt focused on Pine Script event analysis
             final var userMessage = String.format("""
-                    Crypto analyst: Assess liquidity sweep alignment, identify risks/invalidation, classify quality (A/B/C).
+                    Analyze Pine Script alert: Assess setup based on detected event, swept levels, volume/displacement signals. Identify risks, classify quality (A/B/C).
 
                     %s
 
@@ -122,16 +129,25 @@ public class AiAnalysisService {
 
     public ExecutionPlan generateExecutionPlan(final MarketContext context,
                                                 final IntradayContext intradayContext,
+                                                final TradingViewWebhook webhook,
                                                 final String direction) {
-        log.info("Generating execution plan for {} - Direction: {}", context.getSymbol(), direction);
+        log.info("Generating execution plan for {} - Direction: {} - Event: {}",
+                context.getSymbol(), direction, webhook.getEvent());
 
         try {
-            // Build compact context with essential fields only
+            // Build compact context with Pine Script event data and market context
             final var ctx = objectMapper.createObjectNode();
+
+            // Pine Script event data
+            ctx.put("event", webhook.getEvent());
+            ctx.put("tf", webhook.getTimeframe());
+            ctx.put("sweptHigh", webhook.getSweptHigh());
+            ctx.put("sweptLow", webhook.getSweptLow());
+
+            // Market context
             ctx.put("sym", context.getSymbol());
             ctx.put("dir", direction);
             ctx.put("px", context.getCurrentPrice());
-            ctx.put("event", context.getLiquidityEvent());
             ctx.put("sess", context.getSession());
             ctx.put("htf", context.getHtfBias());
             ctx.put("vol", context.getVolatility());
@@ -148,9 +164,9 @@ public class AiAnalysisService {
             final var contextJson = objectMapper.writeValueAsString(ctx);
             final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
 
-            // Concise execution planner prompt
+            // Concise execution planner prompt with Pine Script event focus
             final var userMessage = String.format("""
-                    Plan execution: model (market/limit/scale-in), entry zone, stop logic+price, targets (R multiples), invalidations, risks.
+                    Plan execution based on Pine Script alert: model (market/limit/scale-in), entry zone near swept levels, stop logic+price, targets (R multiples), invalidations, risks.
 
                     %s
 
