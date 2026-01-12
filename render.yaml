@@ -1,0 +1,90 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: trading-engine-postgres
+    env: docker
+    plan: free
+    region: oregon
+    image:
+      url: postgres:14-alpine
+    envVars:
+      - key: POSTGRES_DB
+        value: trading_engine
+      - key: POSTGRES_USER
+        value: postgres
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+    disk:
+      name: postgres-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 1
+
+  # Redis Cache
+  - type: pserv
+    name: trading-engine-redis
+    env: docker
+    plan: free
+    region: oregon
+    image:
+      url: redis:7-alpine
+
+  # Spring Boot Application
+  - type: web
+    name: ai-trading-engine
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # Database connection
+      - key: SPRING_DATASOURCE_URL
+        fromService:
+          type: pserv
+          name: trading-engine-postgres
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        value: postgres
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromService:
+          type: pserv
+          name: trading-engine-postgres
+          envVarKey: POSTGRES_PASSWORD
+
+      # Redis connection
+      - key: SPRING_DATA_REDIS_HOST
+        fromService:
+          type: pserv
+          name: trading-engine-redis
+          property: host
+      - key: SPRING_DATA_REDIS_PORT
+        fromService:
+          type: pserv
+          name: trading-engine-redis
+          property: port
+
+      # API Keys (set these in Render dashboard)
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: WEBHOOK_API_KEY
+        sync: false
+
+      # Trading configuration
+      - key: ACCOUNT_BALANCE
+        value: 10000
+
+      # Database password for app connection
+      - key: DB_PASSWORD
+        fromService:
+          type: pserv
+          name: trading-engine-postgres
+          envVarKey: POSTGRES_PASSWORD
+
+    healthCheckPath: /api/webhook/health
