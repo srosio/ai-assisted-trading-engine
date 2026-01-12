@@ -28,61 +28,46 @@ public class WebhookController {
         log.info("Received TradingView webhook - Symbol: {}, Event: {}, Session: {}",
                 webhook.getSymbol(), webhook.getEvent(), webhook.getSession());
 
-        try {
-            // Step 1: Ingress Layer - Validate payload
-            if (!ingressService.isValidPayload(webhook)) {
-                final var errorResponse = Map.of(
-                        "success", false,
-                        "error", "Invalid payload: missing required fields"
-                );
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
-            }
-
-            // Step 2: Event deduplication
-            if (ingressService.isDuplicate(webhook)) {
-                log.info("Duplicate event ignored - skipping processing");
-                final var response = Map.of(
-                        "success", true,
-                        "status", "DUPLICATE",
-                        "message", "Event already processed within deduplication window"
-                );
-                return ResponseEntity.ok(response);
-            }
-
-            // Step 3: Time alignment and session tagging
-            final var alignedSession = ingressService.processIngress(webhook);
-            webhook.setSession(alignedSession); // Override with exchange-aligned session
-
-            // Step 4: Process webhook through pipeline
-            final var signal = signalProcessor.processWebhook(webhook);
-
-            // Build response
-            final var response = Map.of(
-                    "success", true,
-                    "signalId", signal.getSignalId(),
-                    "status", signal.getStatus(),
-                    "action", signal.getAction(),
-                    "setupQuality", signal.getAiAssessment() != null
-                            ? signal.getAiAssessment().getSetupQuality() : "N/A",
-                    "rulesPassed", signal.getRuleResult() != null
-                                   && signal.getRuleResult().isPassed()
-            );
-
-            log.info("Webhook processed successfully - Signal ID: {}, Status: {}",
-                    signal.getSignalId(), signal.getStatus());
-
-            return ResponseEntity.ok(response);
-
-        } catch (final Exception e) {
-            log.error("Error processing webhook: {}", e.getMessage(), e);
-
+        // Step 1: Ingress Layer - Validate payload
+        if (!ingressService.isValidPayload(webhook)) {
             final var errorResponse = Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", "Invalid payload: missing required fields"
             );
-
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
         }
+
+        // Step 2: Event deduplication
+        if (ingressService.isDuplicate(webhook)) {
+            log.info("Duplicate event ignored - skipping processing");
+            final var response = Map.of(
+                    "success", true,
+                    "status", "DUPLICATE",
+                    "message", "Event already processed within deduplication window"
+            );
+            return ResponseEntity.ok(response);
+        }
+
+        // Step 3: Time alignment and session tagging
+        final var alignedSession = ingressService.processIngress(webhook);
+        webhook.setSession(alignedSession);
+
+        // Step 4: Process webhook asynchronously (fire and forget)
+        signalProcessor.processWebhookAsync(webhook);
+
+        // Step 5: Respond immediately with HTTP 202 Accepted
+        final var response = Map.of(
+                "success", true,
+                "status", "ACCEPTED",
+                "message", "Webhook received and processing started",
+                "symbol", webhook.getSymbol(),
+                "event", webhook.getEvent()
+        );
+
+        log.info("Webhook accepted for async processing - Symbol: {}, Event: {}",
+                webhook.getSymbol(), webhook.getEvent());
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @GetMapping("/health")

@@ -27,6 +27,15 @@ public class NotificationService extends TelegramLongPollingBot {
         sendMessage(message);
     }
 
+    public void sendErrorNotification(final String errorMessage) {
+        if (!telegramConfig.getEnabled()) {
+            log.debug("Telegram notifications disabled");
+            return;
+        }
+
+        sendMessage(errorMessage);
+    }
+
     private String formatSignalMessage(final TradeSignal signal) {
         final var sb = new StringBuilder();
 

@@ -3,6 +3,7 @@ package com.trading.engine.service;
 import com.trading.engine.domain.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,6 +24,18 @@ public class SignalProcessingService {
 
     // Confidence threshold to proceed with execution planning
     private static final int CONFIDENCE_THRESHOLD = 60;
+
+    @Async
+    public void processWebhookAsync(final TradingViewWebhook webhook) {
+        try {
+            log.info("Processing webhook asynchronously for {} - Event: {}",
+                    webhook.getSymbol(), webhook.getEvent());
+            processWebhook(webhook);
+        } catch (final Exception e) {
+            log.error("Error in async webhook processing: {}", e.getMessage(), e);
+            sendErrorToTelegram(webhook, e);
+        }
+    }
 
     public TradeSignal processWebhook(final TradingViewWebhook webhook) {
         final var signalId = UUID.randomUUID().toString();
@@ -228,5 +241,34 @@ public class SignalProcessingService {
             return "SHORT";
         }
         return "UNKNOWN";
+    }
+
+    private void sendErrorToTelegram(final TradingViewWebhook webhook, final Exception error) {
+        try {
+            final var errorMessage = formatErrorMessage(webhook, error);
+            notificationService.sendErrorNotification(errorMessage);
+        } catch (final Exception e) {
+            log.error("Failed to send error notification to Telegram: {}", e.getMessage());
+        }
+    }
+
+    private String formatErrorMessage(final TradingViewWebhook webhook, final Exception error) {
+        final var sb = new StringBuilder();
+        sb.append("🚨 <b>WEBHOOK PROCESSING ERROR</b>\n\n");
+        sb.append("<b>Symbol:</b> ").append(webhook.getSymbol()).append("\n");
+        sb.append("<b>Event:</b> ").append(webhook.getEvent()).append("\n");
+        sb.append("<b>Session:</b> ").append(webhook.getSession()).append("\n");
+        sb.append("<b>Timeframe:</b> ").append(webhook.getTimeframe()).append("\n\n");
+        sb.append("<b>Error:</b> ").append(error.getClass().getSimpleName()).append("\n");
+        sb.append("<b>Message:</b> ").append(error.getMessage()).append("\n\n");
+
+        if (error.getCause() != null) {
+            sb.append("<b>Cause:</b> ").append(error.getCause().getMessage()).append("\n\n");
+        }
+
+        sb.append("<b>Action Required:</b> Check logs and fix the issue\n");
+        sb.append("<b>Timestamp:</b> ").append(LocalDateTime.now()).append("\n");
+
+        return sb.toString();
     }
 }
