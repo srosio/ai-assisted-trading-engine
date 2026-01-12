@@ -37,8 +37,15 @@ public class NotificationService extends TelegramLongPollingBot {
         sb.append("**Symbol:** ").append(signal.getSymbol()).append("\n");
         sb.append("**Direction:** ").append(signal.getDirection()).append("\n");
         sb.append("**Event:** ").append(signal.getEvent()).append("\n");
-        sb.append("**Session:** ").append(signal.getMarketContext().getSession()).append("\n");
-        sb.append("**Price:** ").append(signal.getMarketContext().getCurrentPrice()).append("\n\n");
+
+        // Market context (null-safe)
+        if (signal.getMarketContext() != null) {
+            sb.append("**Session:** ").append(signal.getMarketContext().getSession()).append("\n");
+            sb.append("**Price:** ").append(signal.getMarketContext().getCurrentPrice()).append("\n\n");
+        } else {
+            sb.append("**Session:** N/A\n");
+            sb.append("**Price:** N/A\n\n");
+        }
 
         // Intraday Context
         if (signal.getIntradayContext() != null) {
@@ -53,15 +60,17 @@ public class NotificationService extends TelegramLongPollingBot {
             sb.append("Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100\n\n");
         }
 
-        // AI Assessment
-        sb.append("**AI Assessment:**\n");
-        sb.append("Quality: ").append(signal.getAiAssessment().getSetupQuality()).append("\n");
-        sb.append("Alignment: ").append(signal.getAiAssessment().getAlignmentScore()).append("/100\n");
-        sb.append("Key Risk: ").append(
-                signal.getAiAssessment().getRiskFactors().isEmpty()
-                        ? "None identified"
-                        : signal.getAiAssessment().getRiskFactors().get(0)
-        ).append("\n\n");
+        // AI Assessment (null-safe)
+        if (signal.getAiAssessment() != null) {
+            sb.append("**AI Assessment:**\n");
+            sb.append("Quality: ").append(signal.getAiAssessment().getSetupQuality()).append("\n");
+            sb.append("Alignment: ").append(signal.getAiAssessment().getAlignmentScore()).append("/100\n");
+            sb.append("Key Risk: ").append(
+                    signal.getAiAssessment().getRiskFactors() != null && !signal.getAiAssessment().getRiskFactors().isEmpty()
+                            ? signal.getAiAssessment().getRiskFactors().get(0)
+                            : "None identified"
+            ).append("\n\n");
+        }
 
         // Execution Plan
         if (signal.getExecutionPlan() != null) {
@@ -128,8 +137,10 @@ public class NotificationService extends TelegramLongPollingBot {
             sb.append("\n");
         }
 
-        // AI Summary
-        sb.append("**Summary:** ").append(signal.getAiAssessment().getSummary()).append("\n");
+        // AI Summary (null-safe)
+        if (signal.getAiAssessment() != null && signal.getAiAssessment().getSummary() != null) {
+            sb.append("**Summary:** ").append(signal.getAiAssessment().getSummary()).append("\n");
+        }
 
         return sb.toString();
     }
