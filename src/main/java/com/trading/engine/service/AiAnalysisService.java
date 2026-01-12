@@ -58,24 +58,14 @@ public class AiAnalysisService {
 
             // Strategy-specific prompt based on documented Pine Script strategies
             final var strategyContext = getStrategyContext(webhook.getEvent());
-            final var userMessage = String.format("""
-                    Analyze Pine Script %s strategy alert:
-
-                    Strategy profile: %s
-                    Expected: %s
-
-                    Assess setup quality based on swept levels, volume/displacement, and market context.
-                    Identify risks that could reduce win rate below expected %%.
-                    Classify: A (all criteria met), B (good but minor concerns), C (reject).
-
-                    %s
-
-                    %s
-                    """, strategyContext.get("name"),
-                         strategyContext.get("profile"),
-                         strategyContext.get("expected"),
-                         contextJson,
-                         outputConverter.getFormat());
+            final var userMessage = "Analyze Pine Script " + strategyContext.get("name") + " strategy alert:\n\n" +
+                    "Strategy profile: " + strategyContext.get("profile") + "\n" +
+                    "Expected: " + strategyContext.get("expected") + "\n\n" +
+                    "Assess setup quality based on swept levels, volume/displacement, and market context.\n" +
+                    "Identify risks that could reduce win rate below expected %.\n" +
+                    "Classify: A (all criteria met), B (good but minor concerns), C (reject).\n\n" +
+                    contextJson + "\n\n" +
+                    outputConverter.getFormat();
 
             final var response = chatClient.prompt()
                     .user(userMessage)
@@ -235,26 +225,16 @@ public class AiAnalysisService {
 
             // Strategy-specific execution planning
             final var strategyContext = getStrategyContext(webhook.getEvent());
-            final var userMessage = String.format("""
-                    Plan execution for Pine Script %s strategy:
-
-                    Target profile: %s
-
-                    Generate plan: entry model, zone near swept levels, stop (match strategy risk), targets (match expected R:R), invalidations.
-
-                    For Scalping: Tight stops, quick 1-2R targets
-                    For Swing: Wider stops, 2-4R targets
-                    For Breakout: Inside range stops, 5-10R+ targets
-                    For Adaptive: Match regime (tight for range, wide for trend)
-                    For Liquidity: Beyond swept level, 3-5R targets
-
-                    %s
-
-                    %s
-                    """, strategyContext.get("name"),
-                         strategyContext.get("profile"),
-                         contextJson,
-                         outputConverter.getFormat());
+            final var userMessage = "Plan execution for Pine Script " + strategyContext.get("name") + " strategy:\n\n" +
+                    "Target profile: " + strategyContext.get("profile") + "\n\n" +
+                    "Generate plan: entry model, zone near swept levels, stop (match strategy risk), targets (match expected R:R), invalidations.\n\n" +
+                    "For Scalping: Tight stops, quick 1-2R targets\n" +
+                    "For Swing: Wider stops, 2-4R targets\n" +
+                    "For Breakout: Inside range stops, 5-10R+ targets\n" +
+                    "For Adaptive: Match regime (tight for range, wide for trend)\n" +
+                    "For Liquidity: Beyond swept level, 3-5R targets\n\n" +
+                    contextJson + "\n\n" +
+                    outputConverter.getFormat();
 
             final var response = chatClient.prompt()
                     .user(userMessage)
