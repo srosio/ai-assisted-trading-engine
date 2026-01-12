@@ -2,6 +2,14 @@
 
 A professional, rule-based crypto trading system that uses AI **only** for market context analysis. Built with discipline, risk control, and auditability at its core.
 
+**⚡ Intraday trading system with:**
+- Multi-layered market analysis (11-step pipeline)
+- Deterministic context engine (trend bias, OI+price behavior, confidence scoring)
+- AI execution planning (entry zones, stops, targets with R multiples)
+- Pre-execution checklist (spread, funding, volatility, liquidity)
+- Production Linux deployment (systemd service with auto-restart)
+- Complete auditability (all signals journaled with full context)
+
 ## Core Principles
 
 **AI is used ONLY as a context analyst, NEVER as a trader.**
@@ -13,10 +21,14 @@ A professional, rule-based crypto trading system that uses AI **only** for marke
 - ❌ Make trading decisions
 
 ### What AI Can Do
-- ✅ Assess setup quality (A/B/C)
-- ✅ Identify risk factors
+- ✅ Assess setup quality (A/B/C grading)
+- ✅ Calculate alignment score (0-100)
+- ✅ Identify risk factors and key observations
 - ✅ Provide invalidation criteria
 - ✅ Analyze market context alignment
+- ✅ Generate execution plans (entry zones, stop logic, targets with R multiples)
+- ✅ Suggest execution model (market/limit/scale-in)
+- ✅ Provide risk notes (funding extremes, news events)
 
 ### Non-Negotiable Rules
 All trades must pass:
@@ -27,6 +39,96 @@ All trades must pass:
 **If rules fail, the trade is blocked even if AI analysis is positive.**
 
 **Note:** System only decides YES/NO on taking the trade. Human trader manually manages all risk parameters (entry, stop, target, position size).
+
+## Key Features
+
+### 🔥 Intraday Trading System
+- **Multi-layered analysis pipeline** with 11 steps from webhook to notification
+- **Intraday Context Engine** - Deterministic analysis of market microstructure
+  - Trend bias across 3 timeframes (15m/5m/1m)
+  - OI+price behavior classification (long_buildup, short_buildup, long_squeeze, short_squeeze)
+  - Volume confirmation vs divergence detection
+  - Session narrative (range_expansion, mean_reversion, trend_continuation)
+  - Confidence scoring (0-100) with configurable threshold
+- **No trade limits** - Take as many quality setups as appear (only limited by daily loss)
+- **All signals notified** - Receive Telegram alerts for both VALID and INVALID trades with full context
+
+### 🤖 AI-Powered Execution Planning
+- **Spring AI integration** with Claude (Anthropic)
+- **Setup quality assessment** (A/B/C grading)
+- **Structured execution plans**:
+  - Execution model (market/limit/scale-in)
+  - Entry zone (price range, not just a single price)
+  - Stop placement logic with suggested price
+  - Multiple targets with R multiples (e.g., 3R, 5R)
+  - Invalidation conditions (what makes the setup void)
+  - Risk notes (funding extremes, news events, etc.)
+
+### 📊 Comprehensive Market Data
+- **Real-time Binance Futures data**:
+  - Current price + 24h high/low
+  - Funding rate + delta (current vs 8h ago)
+  - Open interest + percentage change
+  - Taker buy/sell ratio
+  - Recent liquidations (last hour)
+  - Order book imbalance (top 5 levels)
+  - Volatility state (expanding/contracting/stable)
+
+### ✅ Pre-Execution Validation
+- **Ingress Layer**:
+  - Event deduplication (5-minute window prevents duplicate signals)
+  - Time alignment to UTC (exchange time)
+  - Automatic session tagging (ASIA/LONDON/NY)
+- **Rule Engine**:
+  - HTF alignment validation
+  - Session rules (London/NY enabled by default)
+  - Quality threshold enforcement
+  - Daily loss limits (-2R maximum)
+- **Execution Advisory Checklist**:
+  - Spread check (≤5 basis points)
+  - Funding rate acceptability (≤1%)
+  - Volatility within bounds
+  - Liquidity adequacy (order book balance)
+  - Clear warnings and blockers
+
+### 🔒 Production-Ready Deployment
+- **Linux systemd service** - Professional daemon with auto-restart
+- **Secure configuration** - Environment variables, no secrets in code
+- **Resource management** - Memory limits, file descriptor limits
+- **Security hardening** - Unprivileged user, system protection, private tmp
+- **Management commands** - Global `trading-start`, `trading-stop`, `trading-logs` commands
+- **Comprehensive monitoring** - systemd journal integration, health endpoints
+- **Complete documentation** - Installation, troubleshooting, operations guide
+
+### 📱 Intelligent Notifications
+- **All signals notified** - See every trade opportunity and why it was blocked/approved
+- **Rich context** in every notification:
+  - Intraday analysis summary with confidence score
+  - AI assessment (quality, alignment, risks)
+  - Complete execution plan (entry zone, stops, targets)
+  - Pre-execution checklist status (warnings, blockers)
+  - Clear action message (execute or skip with reason)
+- **Status indicators** - ✅ VALID or ❌ INVALID with detailed reasoning
+
+### 📝 Complete Auditability
+- **PostgreSQL journal** - Every signal logged with full context
+- **Trade outcome tracking** - Manual entry of actual results
+- **Performance analytics** - Win rate by setup quality, session, etc.
+- **Signal history** - Review past decisions and outcomes
+
+### 🛡️ Risk Management
+- **AI does NOT trade** - Human approval required for every trade
+- **Non-negotiable rules** - Hard-coded limits that AI cannot bypass
+- **Daily loss limits** - Automatic protection (-2R max loss per day)
+- **Quality filtering** - Block C-quality setups automatically
+- **Confidence gating** - Only high-confidence setups (≥60/100) proceed to execution planning
+
+### 🚀 Developer Experience
+- **Mock mode** - Test without API keys (simulated market data + AI)
+- **Spring Boot 3.2.1** with modern Java 21 patterns
+- **Gradle wrapper** - No installation required
+- **Hot reload** - Fast development iteration
+- **Comprehensive docs** - API endpoints, configuration, Pine Script examples
 
 ## Architecture
 
@@ -739,15 +841,30 @@ docker build -t trading-engine:latest .
 
 ## Important Notes
 
-1. **This system does NOT auto-trade** - It assists human decision-making
-2. **All trades require human confirmation** - The system provides execution plans, not automatic orders
-3. **Production deployment** - Use Linux systemd service for 24/7 operation (see [Deployment Guide](docs/SERVICE_DEPLOYMENT.md))
-4. **Comprehensive analysis** - Multi-layered intraday context engine with confidence scoring
-5. **Pre-execution validation** - Automatic checklist for spread, funding, volatility, and liquidity
-6. **AI constraints are hardcoded** - Cannot be bypassed without code changes
-7. **Risk rules are non-negotiable** - Enforced at the code level
-8. **Everything is journaled** - For accountability and learning
+### System Behavior
+1. **This system does NOT auto-trade** - It provides analysis and execution plans, never executes orders
+2. **All trades require human confirmation** - The system produces YES/NO decisions with full context
+3. **All signals are notified** - Receive Telegram alerts for both VALID and INVALID signals (check status field)
+4. **No trade limits** - System will process unlimited quality setups (only constrained by -2R daily loss limit)
+5. **Confidence gating** - Only signals with ≥60/100 confidence proceed to full execution planning
+
+### Deployment & Operations
+6. **Production deployment** - Use Linux systemd service for 24/7 operation (see [Deployment Guide](docs/SERVICE_DEPLOYMENT.md))
+7. **Multi-layered pipeline** - 11-step processing from webhook to notification (Ingress → Market Data → Intraday Context → AI → Rules → Advisory → Notification)
+8. **Event deduplication** - Duplicate signals within 5-minute window are automatically filtered
 9. **Security hardened** - Runs as unprivileged user, environment-based secrets, systemd security features
+
+### Analysis & Validation
+10. **Comprehensive intraday analysis** - Multi-timeframe trend bias, OI+price classification, volume confirmation, confidence scoring
+11. **Pre-execution checklist** - Automatic validation of spread (≤5bps), funding (≤1%), volatility, liquidity
+12. **AI execution planning** - Entry zones, stop logic, targets with R multiples (e.g., 3R, 5R)
+13. **AI constraints are hardcoded** - Cannot be bypassed without code changes
+14. **Risk rules are non-negotiable** - Enforced at the code level (HTF alignment, sessions, daily loss)
+
+### Auditability & Learning
+15. **Everything is journaled** - Complete signal history with context, analysis, and execution plans
+16. **Trade outcome tracking** - Manually log actual entries/exits for performance analysis
+17. **Performance analytics** - Query win rates by setup quality, session, OI behavior, etc.
 
 ## License
 
@@ -759,4 +876,21 @@ For issues or questions, review the logs first. Most problems are configuration-
 
 ---
 
-**Remember: AI assists, rules decide, humans trade.**
+**Remember: AI analyzes, rules validate, checklists verify, humans execute.**
+
+## Summary
+
+This is a **comprehensive intraday crypto trading assistant** that:
+
+1. **Receives** TradingView webhook alerts (liquidity sweeps, structure breaks)
+2. **Aggregates** real-time market data (price, funding, OI, volume, liquidations, order book)
+3. **Analyzes** intraday context (trend bias 15m/5m/1m, OI+price behavior, confidence scoring)
+4. **Assesses** setup quality with AI (A/B/C grading, alignment scoring)
+5. **Plans** execution with AI (entry zones, stop logic, targets with R multiples)
+6. **Validates** against hard rules (HTF alignment, sessions, quality, daily loss)
+7. **Checks** execution readiness (spread, funding, volatility, liquidity)
+8. **Notifies** trader with full context (ALL signals, both VALID and INVALID)
+9. **Journals** everything for accountability and learning
+10. **Waits** for human trader to review and execute manually
+
+**No automatic trading. No shortcuts. No exceptions.**
