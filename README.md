@@ -431,7 +431,7 @@ trading:
   min-oi-change-percent: 2.0
 
 # Note: No trade limit - take as many quality setups as appear
-# Telegram notifications sent ONLY for confirmed trades (VALID status)
+# Telegram notifications sent for ALL signals (both VALID and INVALID)
 ```
 
 ## Signal Processing Pipeline
@@ -447,7 +447,7 @@ When a webhook is received:
 7. **AI Execution Planning** - Generate execution model, entry zone, stop logic, targets with R multiples, invalidation conditions
 8. **Execution Advisory** - Pre-execution checklist: spread OK, funding acceptable, volatility within bounds, liquidity adequate
 9. **Journal Entry** - Log all inputs, context, analysis, execution plan
-10. **Telegram Notification** - Send comprehensive alert (ONLY for VALID trades that pass all checks)
+10. **Telegram Notification** - Send comprehensive alert for ALL signals (includes status and reason)
 11. **Human Execution** - Trader reviews plan, verifies checklist, executes trade manually
 
 ## Telegram Notification Format
@@ -720,7 +720,7 @@ Check your trading config - you may have sessions disabled or strict quality req
 ### No Telegram Notifications
 Verify bot token and chat ID are correct. Check logs for Telegram API errors.
 
-**Note:** Notifications only sent for VALID trades (passed all checks including confidence threshold, rules, and execution checklist).
+**Note:** Notifications are sent for ALL signals regardless of status. Check the status field (VALID/INVALID) and action message in the notification to determine if the trade should be taken.
 
 ### Database Connection Issues
 Ensure PostgreSQL is running and credentials are correct in application.yml or environment file.

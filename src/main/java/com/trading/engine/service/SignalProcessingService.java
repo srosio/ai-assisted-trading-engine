@@ -35,7 +35,10 @@ public class SignalProcessingService {
             final var context = contextBuilder.buildContext(webhook);
 
             if (!contextBuilder.isContextValid(context)) {
-                return createInvalidSignal(signalId, webhook, "Invalid market context data");
+                final var signal = createInvalidSignal(signalId, webhook, "Invalid market context data");
+                log.info("Sending notification for invalid signal");
+                notificationService.sendSignalNotification(signal);
+                return signal;
             }
 
             // Step 2: Build intraday context (deterministic analysis)
@@ -46,13 +49,17 @@ public class SignalProcessingService {
 
             // Check confidence threshold
             if (intradayContext.getConfidenceScore() < CONFIDENCE_THRESHOLD) {
-                log.info("Confidence too low ({}/100), skipping signal", intradayContext.getConfidenceScore());
-                return createLowConfidenceSignal(signalId, webhook, context, intradayContext);
+                log.info("Confidence too low ({}/100) - sending notification anyway", intradayContext.getConfidenceScore());
+                final var signal = createLowConfidenceSignal(signalId, webhook, context, intradayContext);
+                notificationService.sendSignalNotification(signal);
+                return signal;
             }
 
             if (!ruleEngine.quickValidation(webhook.getSession())) {
-                log.info("Failed quick validation, skipping AI analysis");
-                return createBlockedSignal(signalId, webhook, context, intradayContext, "Pre-validation failed");
+                log.info("Failed quick validation - sending notification anyway");
+                final var signal = createBlockedSignal(signalId, webhook, context, intradayContext, "Pre-validation failed");
+                notificationService.sendSignalNotification(signal);
+                return signal;
             }
 
             // Step 3: AI Trade Analysis
@@ -96,20 +103,23 @@ public class SignalProcessingService {
             log.info("Step 8: Creating journal entry");
             journalService.createEntry(signal);
 
-            // Step 9: Notification (only for valid, high-confidence trades)
-            if ("VALID".equals(signal.getStatus())) {
-                log.info("Step 9: Sending notification for confirmed trade");
-                notificationService.sendSignalNotification(signal);
-            } else {
-                log.info("Step 9: Skipping notification - Trade not confirmed (status: {})", signal.getStatus());
-            }
+            // Step 9: Notification (send for ALL signals)
+            log.info("Step 9: Sending notification - Status: {}", signal.getStatus());
+            notificationService.sendSignalNotification(signal);
 
             log.info("Signal processing complete - Status: {}", signal.getStatus());
             return signal;
 
         } catch (final Exception e) {
             log.error("Error processing webhook: {}", e.getMessage(), e);
-            return createErrorSignal(signalId, webhook, e.getMessage());
+            final var signal = createErrorSignal(signalId, webhook, e.getMessage());
+            try {
+                log.info("Sending notification for error signal");
+                notificationService.sendSignalNotification(signal);
+            } catch (final Exception notifyError) {
+                log.error("Failed to send error notification: {}", notifyError.getMessage());
+            }
+            return signal;
         }
     }
 
