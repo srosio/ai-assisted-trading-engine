@@ -29,41 +29,38 @@ public class AiAnalysisService {
         log.info("Requesting AI analysis for {} - Event: {}", context.getSymbol(), context.getLiquidityEvent());
 
         try {
-            // Build the constrained prompt - no curly braces to avoid template parsing
-            final var contextJson = objectMapper.writeValueAsString(context);
+            // Build compact context with only essential fields
+            final var compactContext = objectMapper.createObjectNode();
+            compactContext.put("sym", context.getSymbol());
+            compactContext.put("event", context.getLiquidityEvent());
+            compactContext.put("px", context.getCurrentPrice());
+            compactContext.put("htf", context.getHtfBias());
+            compactContext.put("loc", context.getLocation());
+            compactContext.put("sess", context.getSession());
+            compactContext.put("oiChg", context.getOiChangePercent());
+            compactContext.put("fund", context.getFundingRate());
+            compactContext.put("vol", context.getVolatility());
+            compactContext.put("volSpike", context.getVolumeSpike());
+            compactContext.put("displ", context.getDisplacementDetected());
 
-            // BeanOutputConverter automatically adds format instructions
+            final var contextJson = objectMapper.writeValueAsString(compactContext);
             final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
 
-            // Build user message without JSON format example (let BeanOutputConverter handle it)
+            // Concise prompt - analyst role only
             final var userMessage = String.format("""
-                    You are a professional crypto market analyst.
-                    You do NOT give trading advice.
-                    You do NOT make buy/sell decisions.
-                    You do NOT modify risk parameters.
+                    Crypto analyst: Assess liquidity sweep alignment, identify risks/invalidation, classify quality (A/B/C).
 
-                    Your role is LIMITED to:
-                    1. Assessing alignment with a liquidity sweep continuation model
-                    2. Identifying risks and invalidation signals
-                    3. Classifying setup quality (A, B, or C)
-
-                    Given the structured market context below, provide your analysis.
-
-                    Market context:
                     %s
 
                     %s
                     """, contextJson, outputConverter.getFormat());
 
-            // Call Claude API using Spring AI ChatClient
             final var response = chatClient.prompt()
                     .user(userMessage)
                     .call()
                     .content();
 
-            // Parse response using the converter
             final var assessment = outputConverter.convert(response);
-
             validateAssessment(assessment);
 
             log.info("AI Assessment complete - Quality: {}, Alignment: {}",
@@ -123,59 +120,39 @@ public class AiAnalysisService {
                 .build();
     }
 
-    /**
-     * Generate execution plan using AI based on market context and intraday analysis
-     */
     public ExecutionPlan generateExecutionPlan(final MarketContext context,
                                                 final IntradayContext intradayContext,
                                                 final String direction) {
         log.info("Generating execution plan for {} - Direction: {}", context.getSymbol(), direction);
 
         try {
-            // Build comprehensive context JSON
-            final var contextData = objectMapper.createObjectNode();
-            contextData.put("symbol", context.getSymbol());
-            contextData.put("event", context.getLiquidityEvent());
-            contextData.put("direction", direction);
-            contextData.put("currentPrice", context.getCurrentPrice());
-            contextData.put("session", context.getSession());
-            contextData.put("htfBias", context.getHtfBias());
-            contextData.put("oiChangePercent", context.getOiChangePercent());
-            contextData.put("fundingRate", context.getFundingRate());
-            contextData.put("volatility", context.getVolatility());
+            // Build compact context with essential fields only
+            final var ctx = objectMapper.createObjectNode();
+            ctx.put("sym", context.getSymbol());
+            ctx.put("dir", direction);
+            ctx.put("px", context.getCurrentPrice());
+            ctx.put("event", context.getLiquidityEvent());
+            ctx.put("sess", context.getSession());
+            ctx.put("htf", context.getHtfBias());
+            ctx.put("vol", context.getVolatility());
+            ctx.put("fund", context.getFundingRate());
 
-            // Add intraday context
-            contextData.put("trendBias15m", intradayContext.getTrendBias15m());
-            contextData.put("trendBias5m", intradayContext.getTrendBias5m());
-            contextData.put("oiPriceBehavior", intradayContext.getOiPriceBehavior());
-            contextData.put("volumeConfirmation", intradayContext.getVolumeConfirmation());
-            contextData.put("sessionNarrative", intradayContext.getSessionNarrative());
-            contextData.put("confidenceScore", intradayContext.getConfidenceScore());
-            contextData.put("fundingDelta", intradayContext.getFundingRateDelta());
-            contextData.put("orderBookImbalance", intradayContext.getOrderBookImbalance());
+            // Intraday context (compact keys)
+            ctx.put("t15", intradayContext.getTrendBias15m());
+            ctx.put("t5", intradayContext.getTrendBias5m());
+            ctx.put("oiPx", intradayContext.getOiPriceBehavior());
+            ctx.put("volConf", intradayContext.getVolumeConfirmation());
+            ctx.put("narrative", intradayContext.getSessionNarrative());
+            ctx.put("conf", intradayContext.getConfidenceScore());
 
-            final var contextJson = objectMapper.writeValueAsString(contextData);
-
+            final var contextJson = objectMapper.writeValueAsString(ctx);
             final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
 
+            // Concise execution planner prompt
             final var userMessage = String.format("""
-                    You are a professional intraday crypto trade execution planner.
+                    Plan execution: model (market/limit/scale-in), entry zone, stop logic+price, targets (R multiples), invalidations, risks.
 
-                    Your role:
-                    1. Design an execution plan (market/limit/scale-in)
-                    2. Define entry zone (price range)
-                    3. Provide stop logic and suggested price
-                    4. Define targets with R multiples
-                    5. List invalidation conditions
-                    6. Note risk factors (funding extremes, news, etc.)
-
-                    DO NOT make the trade decision (already made).
-                    DO NOT suggest position size.
-
-                    Market and intraday context:
                     %s
-
-                    Generate a structured execution plan following the required format.
 
                     %s
                     """, contextJson, outputConverter.getFormat());
