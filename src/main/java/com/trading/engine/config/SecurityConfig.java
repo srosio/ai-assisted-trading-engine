@@ -68,10 +68,15 @@ public class SecurityConfig {
             // Only apply to /api/webhook/* endpoints (except health)
             if (requestPath.startsWith("/api/webhook/")) {
 
-                // Check if API key is configured
-                if (webhookApiKey == null || webhookApiKey.isEmpty()) {
-                    response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    response.getWriter().write("{\"error\":\"API key not configured\"}");
+                // Check if API key is configured - if not, allow unauthenticated access (dev mode)
+                if (webhookApiKey == null || webhookApiKey.isEmpty() ||
+                    webhookApiKey.equals("your-secret-api-key-here")) {
+                    // No API key configured - allow access without authentication
+                    final var authorities = List.of(new SimpleGrantedAuthority("ROLE_API_USER"));
+                    final var authentication = new PreAuthenticatedAuthenticationToken(
+                            "unauthenticated-user", null, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    filterChain.doFilter(request, response);
                     return;
                 }
 
