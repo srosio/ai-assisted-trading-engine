@@ -255,9 +255,33 @@ curl -X POST http://localhost:8080/api/webhook/tradingview \
 
 **You'll see detailed logs in the console showing the entire signal processing pipeline!**
 
-### Option 2: Production Mode (Real API Keys)
+### Option 2: Simple Run (Quick Start with Real APIs)
 
-For actual trading with real market data - see [Setup Instructions](#setup-instructions) below.
+**Run directly without installing as a service:**
+
+```bash
+# Build
+./gradlew build
+
+# Create .env file with your API keys
+cp scripts/environment.template .env
+nano .env
+
+# Run
+./scripts/run.sh
+```
+
+**Features:**
+- ✅ No installation needed
+- ✅ See logs directly in terminal
+- ✅ Quick start/stop (Ctrl+C)
+- ✅ Perfect for testing and development
+
+**See:** [Scripts README →](scripts/README.md)
+
+### Option 3: Production Mode (Real API Keys)
+
+For actual trading with real market data - see [Deployment Options](#deployment-options) below.
 
 ## Project Structure
 
