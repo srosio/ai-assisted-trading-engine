@@ -34,6 +34,32 @@ public class JournalEntry {
     @Column(nullable = false)
     private String event;
 
+    // === Universal Schema Fields ===
+
+    /**
+     * Strategy name (e.g., "Liquidity Sweeps", "Candle 2 Closure RSI")
+     */
+    @Column(name = "strategy")
+    private String strategy;
+
+    /**
+     * Event type: reversal, continuation, breakout, sweep
+     */
+    @Column(name = "event_type")
+    private String eventType;
+
+    /**
+     * Swept price level (for liquidity sweep events)
+     */
+    @Column(name = "swept_level", precision = 20, scale = 8)
+    private BigDecimal sweptLevel;
+
+    /**
+     * Suggested stop loss from strategy
+     */
+    @Column(name = "suggested_stop_loss", precision = 20, scale = 8)
+    private BigDecimal suggestedStopLoss;
+
     @Column(name = "webhook_payload", columnDefinition = "TEXT")
     private String webhookPayload;
 

@@ -30,19 +30,22 @@ public class AiAnalysisService {
     public AiAssessment analyzeContext(final MarketContext context,
                                         final TradingViewWebhook webhook,
                                         final IntradayContext intradayContext) {
-        log.info("Requesting AI analysis for {} - Pine Script Event: {}", context.getSymbol(), webhook.getEvent());
+        log.info("Requesting AI analysis for {} - Strategy: {}, Event: {}, Direction: {}",
+                context.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
 
         try {
-            // Build compact context with Pine Script event data
+            // Build compact context with Universal Schema event data
             final var compactContext = objectMapper.createObjectNode();
 
-            // Pine Script event data (primary analysis focus)
-            compactContext.put("event", webhook.getEvent());
+            // Universal schema event data (primary analysis focus)
+            compactContext.put("strategy", webhook.getStrategy());
+            compactContext.put("eventType", webhook.getEventType());
+            compactContext.put("direction", webhook.getDirection());
             compactContext.put("tf", webhook.getTimeframe());
-            compactContext.put("sweptHigh", webhook.getSweptHigh());
-            compactContext.put("sweptLow", webhook.getSweptLow());
+            compactContext.put("sweptLevel", webhook.getSweptLevel());
             compactContext.put("volSpike", webhook.getVolumeSpike());
-            compactContext.put("displ", webhook.getDisplacementDetected());
+            compactContext.put("displ", webhook.getDisplacement());
+            compactContext.put("suggestedSL", webhook.getSuggestedStopLoss());
 
             // Market context (supporting data)
             compactContext.put("sym", context.getSymbol());
@@ -56,15 +59,16 @@ public class AiAnalysisService {
             final var contextJson = objectMapper.writeValueAsString(compactContext);
             final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
 
-            // Strategy-specific prompt based on documented Pine Script strategies
-            final var strategyContext = getStrategyContext(webhook.getEvent());
-            final var userMessage = "Analyze Pine Script " + strategyContext.get("name") + " strategy alert:\n\n" +
-                    "Strategy profile: " + strategyContext.get("profile") + "\n" +
-                    "Expected: " + strategyContext.get("expected") + "\n\n" +
-                    "Assess setup quality based on swept levels, volume/displacement, and market context.\n" +
+            // Strategy-specific prompt based on strategy name and event type
+            final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
+            final var userMessage = "Analyze " + webhook.getStrategy() + " strategy alert:\n\n" +
+                    "Event Type: " + webhook.getEventType() + " (" + webhook.getDirection() + ")\n" +
+                    "Strategy Profile: " + strategyContext.get("profile") + "\n" +
+                    "Expected Criteria: " + strategyContext.get("expected") + "\n\n" +
+                    "Assess setup quality based on event type, volume/displacement, swept levels, and market context.\n" +
                     "Identify risks that could reduce win rate below expected %.\n" +
                     "Classify: A (all criteria met), B (good but minor concerns), C (reject).\n\n" +
-                    contextJson + "\n\n" +
+                    "Event Data: " + contextJson + "\n\n" +
                     outputConverter.getFormat();
 
             final var response = chatClient.prompt()
@@ -87,57 +91,114 @@ public class AiAnalysisService {
     }
 
     /**
-     * Get strategy-specific context based on Pine Script strategy type
+     * Get strategy-specific context based on strategy name and event type.
+     * Supports universal schema with extensible strategy profiles.
      */
-    private java.util.Map<String, String> getStrategyContext(final String event) {
-        final var eventLower = event.toLowerCase();
+    private java.util.Map<String, String> getStrategyContextByName(final String strategy, final String eventType) {
+        if (strategy == null || strategy.isEmpty()) {
+            return getDefaultStrategyContext();
+        }
 
-        // High Win Rate Scalping (70-80% WR, 1:1-1:2 R:R)
-        if (eventLower.contains("scalping") || eventLower.contains("bb_extreme") ||
-            eventLower.contains("mean_reversion")) {
+        final var strategyLower = strategy.toLowerCase();
+        final var eventLower = eventType != null ? eventType.toLowerCase() : "";
+
+        // === Known Strategies ===
+
+        // Liquidity Sweeps Strategy (45-55% WR, 1:3-1:5 R:R)
+        if (strategyLower.contains("liquidity sweep")) {
             return java.util.Map.of(
-                "name", "High Win Rate Scalping",
-                "profile", "70-80% WR, 1:1-1:2 R:R, mean reversion at extremes",
-                "expected", "Tight BB squeeze, RSI extreme, clear support/resistance for reversal"
+                "name", "Liquidity Sweeps",
+                "profile", "45-55% WR, 1:3-1:5 R:R, liquidity grab reversal",
+                "expected", "Equal highs/lows swept, displacement reversal, volume confirmation, clear invalidation"
             );
         }
 
-        // Medium Win Rate Swing (50-60% WR, 1:2-1:4 R:R)
-        if (eventLower.contains("swing") || eventLower.contains("pullback") ||
-            eventLower.contains("fib_retracement")) {
+        // Candle 2 Closure with RSI Strategy (60-70% WR, 1:2-1:3 R:R)
+        if (strategyLower.contains("candle 2") || strategyLower.contains("closure") ||
+            (strategyLower.contains("rsi") && eventLower.contains("reversal"))) {
             return java.util.Map.of(
-                "name", "Medium Win Rate Swing",
-                "profile", "50-60% WR, 1:2-1:4 R:R, trend continuation",
-                "expected", "Clear trend, pullback to key level (Fib/MA), continuation setup"
+                "name", "Candle 2 Closure with RSI",
+                "profile", "60-70% WR, 1:2-1:3 R:R, two-candle reversal pattern",
+                "expected", "RSI extreme (>70 or <30), two consecutive candles closing against trend, volume confirmation"
             );
         }
 
-        // Low Win Rate Breakout (30-40% WR, 1:5-1:10+ R:R)
-        if (eventLower.contains("breakout") || eventLower.contains("consolidation_break") ||
-            eventLower.contains("range_break")) {
+        // === Generic Event Type Profiles (for new/unknown strategies) ===
+
+        // Reversal events
+        if (eventLower.contains("reversal")) {
             return java.util.Map.of(
-                "name", "Low Win Rate Breakout",
-                "profile", "30-40% WR, 1:5-1:10+ R:R, explosive moves",
-                "expected", "Tight consolidation, volume surge, momentum confirmation"
+                "name", strategy + " (Reversal)",
+                "profile", "50-60% WR, 1:2-1:4 R:R, counter-trend reversal",
+                "expected", "Clear reversal pattern, volume confirmation, divergence or exhaustion signals"
             );
         }
 
-        // Adaptive Strategy (40-60% WR, 1:2-1:4 R:R)
-        if (eventLower.contains("adaptive") || eventLower.contains("regime") ||
-            eventLower.contains("multi_strategy")) {
+        // Continuation events
+        if (eventLower.contains("continuation")) {
             return java.util.Map.of(
-                "name", "Adaptive Strategy",
-                "profile", "40-60% WR, 1:2-1:4 R:R, regime-aware",
-                "expected", "Clear regime identification, appropriate entry for market condition"
+                "name", strategy + " (Continuation)",
+                "profile", "55-65% WR, 1:2-1:3 R:R, trend continuation",
+                "expected", "Strong trend, pullback to key level, resumption with volume"
             );
         }
 
-        // Liquidity Sweep (45-55% WR, 1:3-1:5 R:R) - Default/Original
+        // Breakout events
+        if (eventLower.contains("breakout")) {
+            return java.util.Map.of(
+                "name", strategy + " (Breakout)",
+                "profile", "30-40% WR, 1:5-1:10+ R:R, explosive range break",
+                "expected", "Tight consolidation, volume surge on break, momentum confirmation"
+            );
+        }
+
+        // Sweep events
+        if (eventLower.contains("sweep")) {
+            return java.util.Map.of(
+                "name", strategy + " (Sweep)",
+                "profile", "45-55% WR, 1:3-1:5 R:R, liquidity grab",
+                "expected", "Key level swept, immediate reversal, displacement confirmation"
+            );
+        }
+
+        // === Default/Unknown Strategy ===
+        return getDefaultStrategyContext();
+    }
+
+    /**
+     * Default strategy context for unknown/legacy strategies
+     */
+    private java.util.Map<String, String> getDefaultStrategyContext() {
         return java.util.Map.of(
-            "name", "Liquidity Sweep",
-            "profile", "45-55% WR, 1:3-1:5 R:R, liquidity grab reversal",
-            "expected", "Equal highs/lows swept, displacement reversal, clear invalidation"
+            "name", "Generic Strategy",
+            "profile", "40-60% WR, 1:2-1:4 R:R, general trading setup",
+            "expected", "Clear setup structure, volume/price confirmation, defined risk parameters"
         );
+    }
+
+    /**
+     * Legacy method for backward compatibility with old event-based analysis
+     * @deprecated Use getStrategyContextByName instead
+     */
+    @Deprecated
+    private java.util.Map<String, String> getStrategyContext(final String event) {
+        final var eventLower = event != null ? event.toLowerCase() : "";
+
+        // Try to extract strategy from legacy event string
+        if (eventLower.contains("liquidity") || eventLower.contains("sweep")) {
+            return getStrategyContextByName("Liquidity Sweeps", "sweep");
+        }
+        if (eventLower.contains("closure") || eventLower.contains("candle_2")) {
+            return getStrategyContextByName("Candle 2 Closure RSI", "reversal");
+        }
+        if (eventLower.contains("breakout")) {
+            return getStrategyContextByName("Unknown", "breakout");
+        }
+        if (eventLower.contains("reversal")) {
+            return getStrategyContextByName("Unknown", "reversal");
+        }
+
+        return getDefaultStrategyContext();
     }
 
     private void validateAssessment(final AiAssessment assessment) {
@@ -190,18 +251,20 @@ public class AiAnalysisService {
                                                 final IntradayContext intradayContext,
                                                 final TradingViewWebhook webhook,
                                                 final String direction) {
-        log.info("Generating execution plan for {} - Direction: {} - Event: {}",
-                context.getSymbol(), direction, webhook.getEvent());
+        log.info("Generating execution plan for {} - Strategy: {}, Event: {}, Direction: {}",
+                context.getSymbol(), webhook.getStrategy(), webhook.getEventType(), direction);
 
         try {
-            // Build compact context with Pine Script event data and market context
+            // Build compact context with Universal Schema event data and market context
             final var ctx = objectMapper.createObjectNode();
 
-            // Pine Script event data
-            ctx.put("event", webhook.getEvent());
+            // Universal schema event data
+            ctx.put("strategy", webhook.getStrategy());
+            ctx.put("eventType", webhook.getEventType());
+            ctx.put("direction", webhook.getDirection());
             ctx.put("tf", webhook.getTimeframe());
-            ctx.put("sweptHigh", webhook.getSweptHigh());
-            ctx.put("sweptLow", webhook.getSweptLow());
+            ctx.put("sweptLevel", webhook.getSweptLevel());
+            ctx.put("suggestedSL", webhook.getSuggestedStopLoss());
 
             // Market context
             ctx.put("sym", context.getSymbol());
@@ -224,16 +287,18 @@ public class AiAnalysisService {
             final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
 
             // Strategy-specific execution planning
-            final var strategyContext = getStrategyContext(webhook.getEvent());
-            final var userMessage = "Plan execution for Pine Script " + strategyContext.get("name") + " strategy:\n\n" +
-                    "Target profile: " + strategyContext.get("profile") + "\n\n" +
-                    "Generate plan: entry model, zone near swept levels, stop (match strategy risk), targets (match expected R:R), invalidations.\n\n" +
-                    "For Scalping: Tight stops, quick 1-2R targets\n" +
-                    "For Swing: Wider stops, 2-4R targets\n" +
-                    "For Breakout: Inside range stops, 5-10R+ targets\n" +
-                    "For Adaptive: Match regime (tight for range, wide for trend)\n" +
-                    "For Liquidity: Beyond swept level, 3-5R targets\n\n" +
-                    contextJson + "\n\n" +
+            final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
+            final var userMessage = "Plan execution for " + webhook.getStrategy() + " strategy:\n\n" +
+                    "Event: " + webhook.getEventType() + " (" + webhook.getDirection() + ")\n" +
+                    "Target Profile: " + strategyContext.get("profile") + "\n" +
+                    "Expected Criteria: " + strategyContext.get("expected") + "\n\n" +
+                    "Generate execution plan: entry model, entry zone, stop loss, targets (match expected R:R), invalidations.\n\n" +
+                    "Event-specific guidance:\n" +
+                    "- Reversal: Entry after confirmation, stop beyond reversal point, 2-4R targets\n" +
+                    "- Continuation: Entry on pullback, stop beyond structure, 2-3R targets\n" +
+                    "- Breakout: Entry on break confirmation, stop inside range, 5-10R+ targets\n" +
+                    "- Sweep: Entry beyond swept level, stop past sweep invalidation, 3-5R targets\n\n" +
+                    "Context: " + contextJson + "\n\n" +
                     outputConverter.getFormat();
 
             final var response = chatClient.prompt()
@@ -251,7 +316,7 @@ public class AiAnalysisService {
 
         } catch (final Exception e) {
             log.warn("AI unavailable for execution plan, using static analysis: {}", e.getMessage());
-            final var strategyContext = getStrategyContext(webhook.getEvent());
+            final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
             return staticAnalysis.generateStaticExecutionPlan(
                     context, intradayContext, webhook, direction, strategyContext.get("name")
             );
