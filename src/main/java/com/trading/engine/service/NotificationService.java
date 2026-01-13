@@ -40,57 +40,68 @@ public class NotificationService extends TelegramLongPollingBot {
         final var sb = new StringBuilder();
         final var isValid = signal.getStatus().equals("VALID");
 
-        // Header - Clear status first
-        if (isValid) {
-            sb.append("✅ <b>TRADE SIGNAL</b>\n\n");
-        } else {
-            sb.append("❌ <b>TRADE BLOCKED</b>\n\n");
-        }
+        // Header with status
+        final var emoji = isValid ? "✅" : "⚠️";
+        sb.append(emoji).append(" <b>TRADE SIGNAL</b>\n\n");
 
-        // Trade basics - concise, one line
+        // Signal basics
         sb.append("<b>").append(escapeHtml(signal.getSymbol())).append(" ")
                 .append(escapeHtml(signal.getDirection()));
         if (signal.getMarketContext() != null) {
             sb.append(" @ ").append(signal.getMarketContext().getCurrentPrice());
         }
         sb.append("</b>\n");
-
-        sb.append("Event: ").append(escapeHtml(signal.getEvent()));
+        sb.append(escapeHtml(signal.getEvent()));
         if (signal.getMarketContext() != null) {
-            sb.append(" | Session: ").append(escapeHtml(signal.getMarketContext().getSession()));
+            sb.append(" | ").append(escapeHtml(signal.getMarketContext().getSession()));
         }
         sb.append("\n\n");
 
-        // For blocked signals, show why immediately
-        if (!isValid) {
-            sb.append("<b>⚠️ Why Blocked:</b>\n");
-            if (signal.getAiAssessment() != null && signal.getAiAssessment().getRiskFactors() != null
-                    && !signal.getAiAssessment().getRiskFactors().isEmpty()) {
-                sb.append(escapeHtml(signal.getAiAssessment().getRiskFactors().get(0))).append("\n\n");
-            } else {
-                sb.append(escapeHtml(signal.getAction())).append("\n\n");
-            }
-        }
-
-        // Quality metrics - single line
-        sb.append("<b>Quality:</b> ");
-        if (signal.getAiAssessment() != null) {
-            sb.append(escapeHtml(signal.getAiAssessment().getSetupQuality()))
-                    .append(" | Alignment: ").append(signal.getAiAssessment().getAlignmentScore()).append("/100");
-        }
+        // Market Analysis
         if (signal.getIntradayContext() != null) {
-            sb.append(" | Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100");
+            final var ctx = signal.getIntradayContext();
+            sb.append("<b>📊 Market Analysis:</b>\n");
+            sb.append("• Trends (15m/5m/1m): ")
+                    .append(escapeHtml(ctx.getTrendBias15m())).append("/")
+                    .append(escapeHtml(ctx.getTrendBias5m())).append("/")
+                    .append(escapeHtml(ctx.getTrendBias1m())).append("\n");
+            sb.append("• Volume: ").append(escapeHtml(ctx.getVolumeConfirmation())).append("\n");
+            sb.append("• OI+Price: ").append(escapeHtml(ctx.getOiPriceBehavior())).append("\n");
+            sb.append("• Context: ").append(escapeHtml(ctx.getContextSummary())).append("\n");
+            sb.append("• Confidence: ").append(ctx.getConfidenceScore()).append("/100\n\n");
         }
-        sb.append("\n\n");
 
-        // For valid signals, show execution plan
-        if (isValid && signal.getExecutionPlan() != null) {
+        // AI Analysis section
+        if (signal.getAiAssessment() != null) {
+            final var ai = signal.getAiAssessment();
+            sb.append("<b>🤖 AI Analysis:</b>\n");
+            sb.append("• Setup Quality: ").append(escapeHtml(ai.getSetupQuality())).append("\n");
+            sb.append("• HTF Alignment: ").append(ai.getAlignmentScore()).append("/100\n");
+
+            if (ai.getRiskFactors() != null && !ai.getRiskFactors().isEmpty()) {
+                sb.append("• Key Risk: ").append(escapeHtml(ai.getRiskFactors().get(0))).append("\n");
+            }
+
+            if (ai.getSummary() != null) {
+                // Get first sentence of summary
+                final var summary = ai.getSummary();
+                final var dotIndex = summary.indexOf('.');
+                final var firstSentence = dotIndex > 0 && dotIndex < 200
+                    ? summary.substring(0, dotIndex + 1)
+                    : (summary.length() > 200 ? summary.substring(0, 200) + "..." : summary);
+                sb.append("• Assessment: ").append(escapeHtml(firstSentence)).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        // Execution Plan
+        if (signal.getExecutionPlan() != null) {
             final var plan = signal.getExecutionPlan();
-            sb.append("<b>Execution:</b>\n");
+            sb.append("<b>📍 Execution Plan:</b>\n");
 
             if (plan.getEntryZoneLow() != null && plan.getEntryZoneHigh() != null) {
                 sb.append("Entry: ").append(plan.getEntryZoneLow())
-                        .append("-").append(plan.getEntryZoneHigh()).append("\n");
+                        .append(" - ").append(plan.getEntryZoneHigh()).append("\n");
             }
 
             if (plan.getSuggestedStopPrice() != null) {
@@ -108,14 +119,14 @@ public class NotificationService extends TelegramLongPollingBot {
             sb.append("\n");
         }
 
-        // Warnings/blockers - consolidated
+        // Warnings and Issues
         if (signal.getExecutionChecklist() != null) {
             final var checklist = signal.getExecutionChecklist();
             final var hasWarnings = checklist.getWarnings() != null && !checklist.getWarnings().isEmpty();
             final var hasBlockers = checklist.getBlockers() != null && !checklist.getBlockers().isEmpty();
 
             if (hasWarnings || hasBlockers) {
-                sb.append("<b>Issues:</b>\n");
+                sb.append("<b>⚠️ Review Points:</b>\n");
                 if (hasBlockers) {
                     for (final var blocker : checklist.getBlockers()) {
                         sb.append("🚫 ").append(escapeHtml(blocker)).append("\n");
@@ -130,14 +141,13 @@ public class NotificationService extends TelegramLongPollingBot {
             }
         }
 
-        // Summary - key insight only
-        if (signal.getAiAssessment() != null && signal.getAiAssessment().getSummary() != null) {
-            final var summary = signal.getAiAssessment().getSummary();
-            // Extract first sentence or up to 200 chars
-            final var shortSummary = summary.length() > 200
-                    ? summary.substring(0, summary.indexOf('.', 0) + 1)
-                    : summary;
-            sb.append("<b>Note:</b> ").append(escapeHtml(shortSummary)).append("\n");
+        // Final recommendation
+        sb.append("<b>Recommendation:</b> ");
+        if (isValid) {
+            sb.append("✅ Setup meets criteria - ready for execution\n");
+        } else {
+            sb.append("⚠️ Review carefully - ");
+            sb.append(escapeHtml(signal.getAction())).append("\n");
         }
 
         return sb.toString();
