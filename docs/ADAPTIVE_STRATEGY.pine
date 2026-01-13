@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //@version=6
 indicator("Adaptive Multi-Regime Strategy", overlay=true)
 
@@ -34,6 +37,9 @@ webhookUrl = input.string("https://your-app.onrender.com/api/webhook/tradingview
 [bbMiddle, bbUpper, bbLower] = ta.bb(close, bbLength, bbMult)
 bbWidth = (bbUpper - bbLower) / bbMiddle
 
+// Calculate BB width moving average (moved outside conditionals)
+bbWidthSMA = ta.sma(bbWidth, 50)
+
 // ATR for Volatility
 atr = ta.atr(14)
 atrNormalized = atr / close * 100
@@ -57,10 +63,10 @@ isUptrend = isTrending and ema20 > ema50 and close > ema200
 isDowntrend = isTrending and ema20 < ema50 and close < ema200
 
 // Ranging Regime: Weak ADX + narrow BBs
-isRanging = adx < adxTrendThreshold and bbWidth < ta.sma(bbWidth, 50)
+isRanging = adx < adxTrendThreshold and bbWidth < bbWidthSMA
 
 // Volatile Regime: Wide BBs + high ATR
-isVolatile = bbWidth > ta.sma(bbWidth, 50) * 1.5 or atrNormalized > 3.0
+isVolatile = bbWidth > bbWidthSMA * 1.5 or atrNormalized > 3.0
 
 // Determine Primary Regime
 regime = isUptrend ? "UPTREND" :
@@ -71,14 +77,15 @@ regime = isUptrend ? "UPTREND" :
 // Previous Day High/Low
 var float pdHigh = na
 var float pdLow = na
-if ta.change(time('D'))
+if timeframe.change('D')
     pdHigh := high[1]
     pdLow := low[1]
 
 // Session Detection
-is_london = hour(time, "America/New_York") >= 3 and hour(time, "America/New_York") < 8
-is_ny = hour(time, "America/New_York") >= 8 and hour(time, "America/New_York") < 16
-is_asia = hour(time, "America/New_York") >= 20 or hour(time, "America/New_York") < 3
+currentHour = hour(time, "America/New_York")
+is_london = currentHour >= 3 and currentHour < 8
+is_ny = currentHour >= 8 and currentHour < 16
+is_asia = currentHour >= 20 or currentHour < 3
 
 session = is_london ? "LONDON_OPEN" : is_ny ? "NY_OPEN" : is_asia ? "ASIA_OPEN" : "OFF_SESSION"
 
