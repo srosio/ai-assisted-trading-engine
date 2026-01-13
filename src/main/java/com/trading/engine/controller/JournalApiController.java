@@ -1,6 +1,7 @@
 package com.trading.engine.controller;
 
 import com.trading.engine.domain.JournalEntry;
+import com.trading.engine.dto.JournalEntryResponse;
 import com.trading.engine.dto.JournalStatistics;
 import com.trading.engine.dto.TradeOutcomeUpdate;
 import com.trading.engine.repository.JournalEntryRepository;
@@ -37,7 +38,7 @@ public class JournalApiController {
      * Get all journal entries with pagination
      */
     @GetMapping
-    public ResponseEntity<Page<JournalEntry>> getAllEntries(
+    public ResponseEntity<Page<JournalEntryResponse>> getAllEntries(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -48,15 +49,17 @@ public class JournalApiController {
         final var pageable = PageRequest.of(page, size, sort);
 
         final var entries = journalRepository.findAll(pageable);
-        return ResponseEntity.ok(entries);
+        final var responsePage = entries.map(JournalEntryResponse::fromEntity);
+        return ResponseEntity.ok(responsePage);
     }
 
     /**
      * Get journal entry by signal ID
      */
     @GetMapping("/{signalId}")
-    public ResponseEntity<JournalEntry> getBySignalId(@PathVariable String signalId) {
+    public ResponseEntity<JournalEntryResponse> getBySignalId(@PathVariable String signalId) {
         return journalRepository.findBySignalId(signalId)
+                .map(JournalEntryResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -65,16 +68,19 @@ public class JournalApiController {
      * Get journal entries by symbol
      */
     @GetMapping("/symbol/{symbol}")
-    public ResponseEntity<List<JournalEntry>> getBySymbol(@PathVariable String symbol) {
+    public ResponseEntity<List<JournalEntryResponse>> getBySymbol(@PathVariable String symbol) {
         final var entries = journalRepository.findBySymbolOrderByCreatedAtDesc(symbol);
-        return ResponseEntity.ok(entries);
+        final var responses = entries.stream()
+                .map(JournalEntryResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Get journal entries by date range
      */
     @GetMapping("/date-range")
-    public ResponseEntity<List<JournalEntry>> getByDateRange(
+    public ResponseEntity<List<JournalEntryResponse>> getByDateRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
 
@@ -82,45 +88,57 @@ public class JournalApiController {
         final var end = endDate.atTime(LocalTime.MAX);
 
         final var entries = journalRepository.findByCreatedAtBetween(start, end);
-        return ResponseEntity.ok(entries);
+        final var responses = entries.stream()
+                .map(JournalEntryResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Get journal entries by setup quality
      */
     @GetMapping("/quality/{quality}")
-    public ResponseEntity<List<JournalEntry>> getBySetupQuality(@PathVariable String quality) {
+    public ResponseEntity<List<JournalEntryResponse>> getBySetupQuality(@PathVariable String quality) {
         final var entries = journalRepository.findBySetupQuality(quality.toUpperCase());
-        return ResponseEntity.ok(entries);
+        final var responses = entries.stream()
+                .map(JournalEntryResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Get today's journal entries
      */
     @GetMapping("/today")
-    public ResponseEntity<List<JournalEntry>> getTodayEntries() {
+    public ResponseEntity<List<JournalEntryResponse>> getTodayEntries() {
         final var startOfDay = LocalDate.now().atStartOfDay();
         final var endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
         final var entries = journalRepository.findByCreatedAtBetween(startOfDay, endOfDay);
-        return ResponseEntity.ok(entries);
+        final var responses = entries.stream()
+                .map(JournalEntryResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Get taken trades (trades that were actually executed)
      */
     @GetMapping("/taken")
-    public ResponseEntity<List<JournalEntry>> getTakenTrades() {
+    public ResponseEntity<List<JournalEntryResponse>> getTakenTrades() {
         final var startOfDay = LocalDate.now().atStartOfDay();
         final var entries = journalRepository.findTakenTradesToday(startOfDay);
-        return ResponseEntity.ok(entries);
+        final var responses = entries.stream()
+                .map(JournalEntryResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     /**
      * Update trade outcome (for manual tracking after trade execution)
      */
     @PutMapping("/{signalId}/outcome")
-    public ResponseEntity<JournalEntry> updateTradeOutcome(
+    public ResponseEntity<JournalEntryResponse> updateTradeOutcome(
             @PathVariable String signalId,
             @RequestBody TradeOutcomeUpdate outcomeUpdate) {
 
@@ -145,7 +163,7 @@ public class JournalApiController {
 
                     final var updated = journalRepository.save(entry);
                     log.info("Updated trade outcome for signal: {} - Outcome: {}", signalId, outcomeUpdate.getOutcome());
-                    return ResponseEntity.ok(updated);
+                    return ResponseEntity.ok(JournalEntryResponse.fromEntity(updated));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
