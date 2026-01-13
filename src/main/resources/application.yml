@@ -1,15 +1,10 @@
-# Mock Mode - Enable when API keys are not available
-# Automatically enables mock services for Binance, Claude, and Telegram
-mock:
-  enabled: ${MOCK_ENABLED:false}
-
 spring:
   application:
     name: ai-assisted-trading-engine
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/trading_engine
-    username: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/trading_engine}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:root}
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -33,7 +28,7 @@ spring:
 
   data:
     redis:
-      host: localhost
+      host: ${REDIS_URL:localhost}
       port: 6379
       password: ${REDIS_PASSWORD:}
       timeout: 2000ms
@@ -51,7 +46,7 @@ server:
 # Webhook API Security
 webhook:
   api:
-    key: ${WEBHOOK_API_KEY:your-secret-api-key-here}
+    key: ${WEBHOOK_API_KEY:mock-key}
 
 logging:
   level:
@@ -94,9 +89,6 @@ trading:
   default-risk-percent: 1.0
   min-risk-reward-ratio: 3.0
   max-daily-loss-r: 2.0
-
-  # Account
-  account-balance: ${ACCOUNT_BALANCE:10000}
 
   # Session Rules
   london-session-enabled: true

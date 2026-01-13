@@ -1,0 +1,131 @@
+//@version=6
+indicator("Medium Win Rate Swing Strategy", overlay=true)
+
+// ============================================================================
+// STRATEGY: Medium Win Rate Swing (50-60% WR, 1:2-1:4 R:R)
+// Trend continuation trades using Fibonacci retracements and moving averages
+// Webhook-integrated with AI-Assisted Trading Engine
+// ============================================================================
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INPUTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Moving Averages
+emaFastLength = input.int(20, "EMA Fast", minval=1)
+emaSlowLength = input.int(50, "EMA Slow", minval=1)
+ema200Length = input.int(200, "EMA Long-term", minval=1)
+
+// Fibonacci Levels
+fibLookback = input.int(50, "Fib Lookback Bars", minval=10)
+fib618Level = input.float(0.618, "Fib Retracement Level", minval=0.5, maxval=0.8, step=0.001)
+
+// Volume Confirmation
+volMultiplier = input.float(1.5, "Volume Spike Multiplier", minval=1.0)
+
+// Webhook Settings
+webhookUrl = input.string("https://your-app.onrender.com/api/webhook/tradingview?apiKey=YOUR_KEY", "Webhook URL")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDICATORS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Moving Averages
+emaFast = ta.ema(close, emaFastLength)
+emaSlow = ta.ema(close, emaSlowLength)
+ema200 = ta.ema(close, ema200Length)
+
+// Trend Identification
+uptrend = emaFast > emaSlow and close > ema200
+downtrend = emaFast < emaSlow and close < ema200
+
+// Fibonacci Retracement
+var float fibHigh = na
+var float fibLow = na
+var int trendBars = 0
+
+if uptrend
+    trendBars += 1
+    if trendBars == 1 or high > fibHigh
+        fibHigh := ta.highest(high, fibLookback)
+        fibLow := ta.lowest(low, fibLookback)
+else if downtrend
+    trendBars += 1
+    if trendBars == 1 or low < fibLow
+        fibHigh := ta.highest(high, fibLookback)
+        fibLow := ta.lowest(low, fibLookback)
+else
+    trendBars := 0
+
+fibRange = fibHigh - fibLow
+fib618 = fibLow + (fibRange * fib618Level)
+fib382 = fibLow + (fibRange * 0.382)
+
+// Volume
+volSMA = ta.sma(volume, 20)
+volumeSpike = volume > volSMA * volMultiplier
+
+// Previous Day High/Low
+var float pdHigh = na
+var float pdLow = na
+if ta.change(time('D'))
+    pdHigh := high[1]
+    pdLow := low[1]
+
+// Session Detection
+is_london = hour(time, "America/New_York") >= 3 and hour(time, "America/New_York") < 8
+is_ny = hour(time, "America/New_York") >= 8 and hour(time, "America/New_York") < 16
+is_asia = hour(time, "America/New_York") >= 20 or hour(time, "America/New_York") < 3
+
+session = is_london ? "LONDON_OPEN" : is_ny ? "NY_OPEN" : is_asia ? "ASIA_OPEN" : "OFF_SESSION"
+
+// HTF Bias (4H timeframe)
+htf_ema_fast = request.security(syminfo.tickerid, "240", ta.ema(close, 20))
+htf_ema_slow = request.security(syminfo.tickerid, "240", ta.ema(close, 50))
+htfBias = htf_ema_fast > htf_ema_slow ? "BULLISH" : htf_ema_fast < htf_ema_slow ? "BEARISH" : "NEUTRAL"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STRATEGY LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Long Setup: Uptrend + pullback to Fib 0.618 + bounce
+longPullback = uptrend and low <= fib618 and close > fib618
+longConfirmed = longPullback and close > open and volumeSpike
+
+// Short Setup: Downtrend + pullback to Fib 0.618 + rejection
+shortPullback = downtrend and high >= fib618 and close < fib618
+shortConfirmed = shortPullback and close < open and volumeSpike
+
+// Displacement Detection
+candleRange = high - low
+avgRange = ta.sma(candleRange, 14)
+displacementDetected = candleRange > avgRange * 1.8
+
+// Swept Levels
+sweptHigh = high > pdHigh ? pdHigh : na
+sweptLow = low < pdLow ? pdLow : na
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLOTTING
+// ─────────────────────────────────────────────────────────────────────────────
+
+plot(emaFast, "EMA 20", color=color.blue, linewidth=2)
+plot(emaSlow, "EMA 50", color=color.orange, linewidth=2)
+plot(ema200, "EMA 200", color=color.gray, linewidth=2)
+
+plot(fib618, "Fib 0.618", color=color.yellow, linewidth=1, style=plot.style_circles)
+
+plotshape(longConfirmed, "Long Swing", shape.triangleup, location.belowbar, color.green, size=size.normal)
+plotshape(shortConfirmed, "Short Swing", shape.triangledown, location.abovebar, color.red, size=size.normal)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALERTS & WEBHOOKS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Long Alert
+if longConfirmed
+    alert('{"symbol":"' + syminfo.ticker + '", "timeframe":"' + timeframe.period + '", "event":"swing_long_fib_pullback", "session":"' + session + '", "price":' + str.tostring(close) + ', "previousDayHigh":' + str.tostring(pdHigh) + ', "previousDayLow":' + str.tostring(pdLow) + ', "volumeSpike":' + str.tostring(volumeSpike) + ', "displacementDetected":' + str.tostring(displacementDetected) + ', "sweptHigh":' + str.tostring(sweptHigh) + ', "sweptLow":' + str.tostring(sweptLow) + ', "htfBias":"' + htfBias + '"}', alert.freq_once_per_bar_close)
+
+// Short Alert
+if shortConfirmed
+    alert('{"symbol":"' + syminfo.ticker + '", "timeframe":"' + timeframe.period + '", "event":"swing_short_fib_pullback", "session":"' + session + '", "price":' + str.tostring(close) + ', "previousDayHigh":' + str.tostring(pdHigh) + ', "previousDayLow":' + str.tostring(pdLow) + ', "volumeSpike":' + str.tostring(volumeSpike) + ', "displacementDetected":' + str.tostring(displacementDetected) + ', "sweptHigh":' + str.tostring(sweptHigh) + ', "sweptLow":' + str.tostring(sweptLow) + ', "htfBias":"' + htfBias + '"}', alert.freq_once_per_bar_close)
