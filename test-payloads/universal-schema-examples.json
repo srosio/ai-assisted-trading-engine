@@ -1,0 +1,128 @@
+{
+  "examples": [
+    {
+      "name": "Liquidity Sweep - Bullish",
+      "description": "Example of a liquidity sweep event in bullish direction",
+      "payload": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15",
+        "strategy": "Liquidity Sweeps",
+        "event_type": "sweep",
+        "direction": "bullish",
+        "session": "London",
+        "currentPrice": 92100.50,
+        "suggestedStopLoss": 91800.00,
+        "sweptLevel": 91950.00,
+        "htfBias": "bullish",
+        "displacement": true,
+        "volumeSpike": true,
+        "previousDayHigh": 92500.00,
+        "previousDayLow": 91500.00,
+        "timestamp": "2026-01-14T10:30:00Z"
+      }
+    },
+    {
+      "name": "Candle 2 Closure RSI - Bearish Reversal",
+      "description": "Two-candle reversal pattern with RSI extreme",
+      "payload": {
+        "symbol": "ETHUSDT",
+        "timeframe": "5",
+        "strategy": "Candle 2 Closure RSI",
+        "event_type": "reversal",
+        "direction": "bearish",
+        "session": "NY",
+        "currentPrice": 2050.75,
+        "suggestedStopLoss": 2065.00,
+        "htfBias": "bearish",
+        "displacement": true,
+        "volumeSpike": true,
+        "timestamp": "2026-01-14T14:45:00Z"
+      }
+    },
+    {
+      "name": "Breakout Strategy - Bullish",
+      "description": "Range breakout with volume confirmation",
+      "payload": {
+        "symbol": "SOLUSDT",
+        "timeframe": "30",
+        "strategy": "Range Breakout Pro",
+        "event_type": "breakout",
+        "direction": "bullish",
+        "session": "London",
+        "currentPrice": 105.50,
+        "suggestedStopLoss": 103.00,
+        "htfBias": "bullish",
+        "displacement": true,
+        "volumeSpike": true,
+        "previousDayHigh": 106.00,
+        "previousDayLow": 102.00,
+        "timestamp": "2026-01-14T11:00:00Z"
+      }
+    },
+    {
+      "name": "Continuation Strategy - Bullish Pullback",
+      "description": "Trend continuation after pullback",
+      "payload": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15",
+        "strategy": "Trend Continuation",
+        "event_type": "continuation",
+        "direction": "bullish",
+        "session": "NY",
+        "currentPrice": 93500.00,
+        "suggestedStopLoss": 93000.00,
+        "htfBias": "bullish",
+        "displacement": false,
+        "volumeSpike": true,
+        "timestamp": "2026-01-14T15:30:00Z"
+      }
+    },
+    {
+      "name": "Nested Format Example",
+      "description": "Using nested price and context objects",
+      "payload": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15",
+        "strategy": "Liquidity Sweeps",
+        "event_type": "reversal",
+        "direction": "bullish",
+        "session": "London",
+        "price": {
+          "close": 92100.50,
+          "stop_loss": 91800.00
+        },
+        "context": {
+          "swept_level": 91950.00,
+          "htf_bias": "bullish",
+          "displacement": true,
+          "volume_spike": true,
+          "previous_day_high": 92500.00,
+          "previous_day_low": 91500.00
+        },
+        "timestamp": "2026-01-14T10:30:00Z"
+      }
+    },
+    {
+      "name": "Legacy Format (Still Supported)",
+      "description": "Old format - automatically converted to universal schema",
+      "payload": {
+        "symbol": "BTCUSDT",
+        "timeframe": "5m",
+        "event": "liquidity_sweep_long",
+        "session": "NY",
+        "price": 43120.50,
+        "previousDayHigh": 43210.00,
+        "previousDayLow": 42880.00,
+        "volumeSpike": true,
+        "displacementDetected": true,
+        "htfBias": "bullish",
+        "sweptHigh": 43150.00
+      }
+    }
+  ],
+  "test_instructions": {
+    "health_check": "curl http://localhost:8080/api/webhook/health",
+    "send_test_signal": "curl -X POST http://localhost:8080/api/webhook/test -H 'Content-Type: application/json' -H 'X-API-Key: your-key' -d @payload.json",
+    "send_production_signal": "curl -X POST http://localhost:8080/api/webhook/tradingview -H 'Content-Type: application/json' -H 'X-API-Key: your-key' -d @payload.json"
+  }
+}
