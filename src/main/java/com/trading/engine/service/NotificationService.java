@@ -38,117 +38,106 @@ public class NotificationService extends TelegramLongPollingBot {
 
     private String formatSignalMessage(final TradeSignal signal) {
         final var sb = new StringBuilder();
+        final var isValid = signal.getStatus().equals("VALID");
 
-        final var emoji = signal.getStatus().equals("VALID") ? "✅" : "❌";
-        sb.append(emoji).append(" <b>INTRADAY TRADE SIGNAL</b>\n\n");
-
-        // Basic info
-        sb.append("<b>Symbol:</b> ").append(escapeHtml(signal.getSymbol())).append("\n");
-        sb.append("<b>Direction:</b> ").append(escapeHtml(signal.getDirection())).append("\n");
-        sb.append("<b>Event:</b> ").append(escapeHtml(signal.getEvent())).append("\n");
-
-        // Market context (null-safe)
-        if (signal.getMarketContext() != null) {
-            sb.append("<b>Session:</b> ").append(escapeHtml(signal.getMarketContext().getSession())).append("\n");
-            sb.append("<b>Price:</b> ").append(signal.getMarketContext().getCurrentPrice()).append("\n\n");
+        // Header - Clear status first
+        if (isValid) {
+            sb.append("✅ <b>TRADE SIGNAL</b>\n\n");
         } else {
-            sb.append("<b>Session:</b> N/A\n");
-            sb.append("<b>Price:</b> N/A\n\n");
+            sb.append("❌ <b>TRADE BLOCKED</b>\n\n");
         }
 
-        // Intraday Context
-        if (signal.getIntradayContext() != null) {
-            sb.append("<b>Intraday Analysis:</b>\n");
-            sb.append("Context: ").append(escapeHtml(signal.getIntradayContext().getContextSummary())).append("\n");
-            sb.append("Trend 15m/5m/1m: ")
-                    .append(escapeHtml(signal.getIntradayContext().getTrendBias15m())).append("/")
-                    .append(escapeHtml(signal.getIntradayContext().getTrendBias5m())).append("/")
-                    .append(escapeHtml(signal.getIntradayContext().getTrendBias1m())).append("\n");
-            sb.append("OI+Price: ").append(escapeHtml(signal.getIntradayContext().getOiPriceBehavior())).append("\n");
-            sb.append("Volume: ").append(escapeHtml(signal.getIntradayContext().getVolumeConfirmation())).append("\n");
-            sb.append("Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100\n\n");
+        // Trade basics - concise, one line
+        sb.append("<b>").append(escapeHtml(signal.getSymbol())).append(" ")
+                .append(escapeHtml(signal.getDirection()));
+        if (signal.getMarketContext() != null) {
+            sb.append(" @ ").append(signal.getMarketContext().getCurrentPrice());
+        }
+        sb.append("</b>\n");
+
+        sb.append("Event: ").append(escapeHtml(signal.getEvent()));
+        if (signal.getMarketContext() != null) {
+            sb.append(" | Session: ").append(escapeHtml(signal.getMarketContext().getSession()));
+        }
+        sb.append("\n\n");
+
+        // For blocked signals, show why immediately
+        if (!isValid) {
+            sb.append("<b>⚠️ Why Blocked:</b>\n");
+            if (signal.getAiAssessment() != null && signal.getAiAssessment().getRiskFactors() != null
+                    && !signal.getAiAssessment().getRiskFactors().isEmpty()) {
+                sb.append(escapeHtml(signal.getAiAssessment().getRiskFactors().get(0))).append("\n\n");
+            } else {
+                sb.append(escapeHtml(signal.getAction())).append("\n\n");
+            }
         }
 
-        // AI Assessment (null-safe)
+        // Quality metrics - single line
+        sb.append("<b>Quality:</b> ");
         if (signal.getAiAssessment() != null) {
-            sb.append("<b>AI Assessment:</b>\n");
-            sb.append("Quality: ").append(escapeHtml(signal.getAiAssessment().getSetupQuality())).append("\n");
-            sb.append("Alignment: ").append(signal.getAiAssessment().getAlignmentScore()).append("/100\n");
-            sb.append("Key Risk: ").append(escapeHtml(
-                    signal.getAiAssessment().getRiskFactors() != null && !signal.getAiAssessment().getRiskFactors().isEmpty()
-                            ? signal.getAiAssessment().getRiskFactors().get(0)
-                            : "None identified"
-            )).append("\n\n");
+            sb.append(escapeHtml(signal.getAiAssessment().getSetupQuality()))
+                    .append(" | Alignment: ").append(signal.getAiAssessment().getAlignmentScore()).append("/100");
         }
+        if (signal.getIntradayContext() != null) {
+            sb.append(" | Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100");
+        }
+        sb.append("\n\n");
 
-        // Execution Plan
-        if (signal.getExecutionPlan() != null) {
+        // For valid signals, show execution plan
+        if (isValid && signal.getExecutionPlan() != null) {
             final var plan = signal.getExecutionPlan();
-            sb.append("<b>Execution Plan:</b>\n");
-            sb.append("Model: ").append(escapeHtml(plan.getExecutionModel())).append("\n");
+            sb.append("<b>Execution:</b>\n");
 
             if (plan.getEntryZoneLow() != null && plan.getEntryZoneHigh() != null) {
-                sb.append("Entry Zone: ").append(plan.getEntryZoneLow())
-                        .append(" - ").append(plan.getEntryZoneHigh()).append("\n");
+                sb.append("Entry: ").append(plan.getEntryZoneLow())
+                        .append("-").append(plan.getEntryZoneHigh()).append("\n");
             }
 
-            if (plan.getStopLogic() != null) {
-                sb.append("Stop: ").append(escapeHtml(plan.getStopLogic()));
-                if (plan.getSuggestedStopPrice() != null) {
-                    sb.append(" @ ").append(plan.getSuggestedStopPrice());
-                }
-                sb.append("\n");
+            if (plan.getSuggestedStopPrice() != null) {
+                sb.append("Stop: ").append(plan.getSuggestedStopPrice()).append("\n");
             }
 
             if (plan.getTargets() != null && !plan.getTargets().isEmpty()) {
-                sb.append("Targets:\n");
-                for (final var target : plan.getTargets()) {
-                    sb.append("  - ").append(target.getPrice())
-                            .append(" (").append(target.getRMultiple()).append("R): ")
-                            .append(escapeHtml(target.getLogic())).append("\n");
+                sb.append("Targets: ");
+                for (int i = 0; i < Math.min(plan.getTargets().size(), 3); i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(plan.getTargets().get(i).getPrice());
                 }
+                sb.append("\n");
             }
             sb.append("\n");
         }
 
-        // Execution Checklist
+        // Warnings/blockers - consolidated
         if (signal.getExecutionChecklist() != null) {
             final var checklist = signal.getExecutionChecklist();
-            sb.append("<b>Pre-Execution Checklist:</b>\n");
-            sb.append(checklist.getReadyForExecution() ? "✅ " : "❌ ")
-                    .append(escapeHtml(checklist.getChecklistSummary())).append("\n");
+            final var hasWarnings = checklist.getWarnings() != null && !checklist.getWarnings().isEmpty();
+            final var hasBlockers = checklist.getBlockers() != null && !checklist.getBlockers().isEmpty();
 
-            if (checklist.getWarnings() != null && !checklist.getWarnings().isEmpty()) {
-                sb.append("Warnings:\n");
-                for (final var warning : checklist.getWarnings()) {
-                    sb.append("  ⚠️ ").append(escapeHtml(warning)).append("\n");
+            if (hasWarnings || hasBlockers) {
+                sb.append("<b>Issues:</b>\n");
+                if (hasBlockers) {
+                    for (final var blocker : checklist.getBlockers()) {
+                        sb.append("🚫 ").append(escapeHtml(blocker)).append("\n");
+                    }
                 }
-            }
-
-            if (checklist.getBlockers() != null && !checklist.getBlockers().isEmpty()) {
-                sb.append("Blockers:\n");
-                for (final var blocker : checklist.getBlockers()) {
-                    sb.append("  🚫 ").append(escapeHtml(blocker)).append("\n");
+                if (hasWarnings) {
+                    for (final var warning : checklist.getWarnings()) {
+                        sb.append("⚠️ ").append(escapeHtml(warning)).append("\n");
+                    }
                 }
+                sb.append("\n");
             }
-            sb.append("\n");
         }
 
-        // Action
-        sb.append("<b>Action:</b> ").append(escapeHtml(signal.getAction())).append("\n\n");
-
-        // Invalidation
-        if (signal.getExecutionPlan() != null && signal.getExecutionPlan().getInvalidationConditions() != null) {
-            sb.append("<b>Invalidation:</b>\n");
-            for (final var condition : signal.getExecutionPlan().getInvalidationConditions()) {
-                sb.append("• ").append(escapeHtml(condition)).append("\n");
-            }
-            sb.append("\n");
-        }
-
-        // AI Summary (null-safe)
+        // Summary - key insight only
         if (signal.getAiAssessment() != null && signal.getAiAssessment().getSummary() != null) {
-            sb.append("<b>Summary:</b> ").append(escapeHtml(signal.getAiAssessment().getSummary())).append("\n");
+            final var summary = signal.getAiAssessment().getSummary();
+            // Extract first sentence or up to 200 chars
+            final var shortSummary = summary.length() > 200
+                    ? summary.substring(0, summary.indexOf('.', 0) + 1)
+                    : summary;
+            sb.append("<b>Note:</b> ").append(escapeHtml(shortSummary)).append("\n");
         }
 
         return sb.toString();
