@@ -4,26 +4,26 @@ Complete documentation for the standardized webhook schema supporting multiple T
 
 ## Overview
 
-The Universal Trading Event Schema provides a consistent format for all trading signals across different strategies. This enables:
+The Universal Trading Event Schema provides a consistent, clean format for all trading signals. This enables:
 
 - **Multi-Strategy Support**: Run multiple Pine Script strategies with consistent formatting
 - **Strategy-Aware AI Analysis**: AI prompts adapt to each strategy's profile
 - **Better Analytics**: Track performance by strategy and event type
-- **Future-Proof**: Easy to add new strategies without code changes
-- **Backward Compatible**: Legacy format still supported
+- **Clean Structure**: Organized nested objects for price and context data
+- **Type Safety**: Proper validation and type checking
 
 ---
 
-## Quick Start
+## Schema Format
 
-### Universal Schema Format
+### Complete Example
 
 ```json
 {
   "symbol": "BTCUSDT",
   "timeframe": "15",
-  "strategy": "Liquidity Sweeps",
-  "event_type": "sweep",
+  "strategy": "Candle 2 Closure",
+  "event_type": "reversal",
   "direction": "bullish",
   "session": "London",
   "price": {
@@ -33,36 +33,25 @@ The Universal Trading Event Schema provides a consistent format for all trading 
   "context": {
     "swept_level": 91950.00,
     "htf_bias": "bullish",
-    "displacement": true,
-    "volume_spike": true,
-    "previous_day_high": 92500.00,
-    "previous_day_low": 91500.00
+    "displacement": true
   },
   "timestamp": "2026-01-14T10:30:00Z"
 }
 ```
 
-### Alternative Flat Format
-
-Both nested and flat formats are supported. Use whichever is easier for your Pine Script:
+### Minimal Example
 
 ```json
 {
   "symbol": "BTCUSDT",
   "timeframe": "15",
-  "strategy": "Liquidity Sweeps",
-  "event_type": "sweep",
+  "strategy": "Simple Reversal",
+  "event_type": "reversal",
   "direction": "bullish",
   "session": "London",
-  "currentPrice": 92100.50,
-  "suggestedStopLoss": 91800.00,
-  "sweptLevel": 91950.00,
-  "htfBias": "bullish",
-  "displacement": true,
-  "volumeSpike": true,
-  "previousDayHigh": 92500.00,
-  "previousDayLow": 91500.00,
-  "timestamp": "2026-01-14T10:30:00Z"
+  "price": {
+    "close": 92100.50
+  }
 }
 ```
 
@@ -70,42 +59,37 @@ Both nested and flat formats are supported. Use whichever is easier for your Pin
 
 ## Field Reference
 
-### Required Fields
+### Top-Level Required Fields
 
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `symbol` | string | Trading pair | `"BTCUSDT"` |
-| `timeframe` | string | Chart timeframe | `"5"`, `"15"`, `"1h"` |
-| `strategy` | string | Strategy name | `"Liquidity Sweeps"` |
-| `event_type` | string | Event type | `"reversal"`, `"continuation"`, `"breakout"`, `"sweep"` |
-| `direction` | string | Trade direction | `"bullish"` or `"bearish"` |
-| `session` | string | Trading session | `"London"`, `"NY"`, `"Asia"` |
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `symbol` | string | Required | Trading pair (e.g., "BTCUSDT") |
+| `timeframe` | string | Required | Chart timeframe (e.g., "5", "15", "1h") |
+| `strategy` | string | Required | Strategy name (e.g., "Liquidity Sweeps") |
+| `event_type` | string | Required | Must be: `reversal`, `continuation`, `breakout`, or `sweep` |
+| `direction` | string | Required | Must be: `bullish` or `bearish` |
+| `session` | string | Required | Trading session: `London`, `NY`, or `Asia` |
+| `price` | object | Required | Price information (see below) |
+| `context` | object | Optional | Context information (see below) |
+| `timestamp` | string (ISO-8601) | Optional | Event timestamp (auto-generated if not provided) |
 
-### Price Fields
+### Price Object (Required)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `price.close` or `currentPrice` | number | Yes | Current close price |
-| `price.stop_loss` or `suggestedStopLoss` | number | No | Suggested stop loss from strategy |
+| `close` | number | Yes | Current close price |
+| `stop_loss` | number | No | Suggested stop loss from strategy |
 
-### Context Fields
-
-All context fields are optional but recommended for better AI analysis:
+### Context Object (Optional)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `context.swept_level` or `sweptLevel` | number | Price level that was swept (for liquidity events) |
-| `context.htf_bias` or `htfBias` | string | Higher timeframe bias: `"bullish"` or `"bearish"` |
-| `context.displacement` or `displacement` | boolean | Strong price movement detected |
-| `context.volume_spike` or `volumeSpike` | boolean | Volume spike detected |
-| `context.previous_day_high` | number | Previous day high |
-| `context.previous_day_low` | number | Previous day low |
-
-### Optional Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `timestamp` | string (ISO-8601) | Event timestamp (auto-generated if not provided) |
+| `swept_level` | number | Price level that was swept (for sweep events) |
+| `htf_bias` | string | Higher timeframe bias: `"bullish"` or `"bearish"` |
+| `displacement` | boolean | Strong price movement detected |
+| `volume_spike` | boolean | Volume spike detected |
+| `previous_day_high` | number | Previous day high for reference |
+| `previous_day_low` | number | Previous day low for reference |
 
 ---
 
@@ -126,6 +110,10 @@ All context fields are optional but recommended for better AI analysis:
 {
   "event_type": "reversal",
   "direction": "bullish",
+  "price": {
+    "close": 92100.50,
+    "stop_loss": 91800.00
+  },
   "context": {
     "displacement": true,
     "volume_spike": true
@@ -148,6 +136,10 @@ All context fields are optional but recommended for better AI analysis:
 {
   "event_type": "continuation",
   "direction": "bullish",
+  "price": {
+    "close": 93500.00,
+    "stop_loss": 93000.00
+  },
   "context": {
     "htf_bias": "bullish"
   }
@@ -169,6 +161,10 @@ All context fields are optional but recommended for better AI analysis:
 {
   "event_type": "breakout",
   "direction": "bullish",
+  "price": {
+    "close": 105.50,
+    "stop_loss": 103.00
+  },
   "context": {
     "volume_spike": true,
     "displacement": true
@@ -191,6 +187,10 @@ All context fields are optional but recommended for better AI analysis:
 {
   "event_type": "sweep",
   "direction": "bullish",
+  "price": {
+    "close": 92100.50,
+    "stop_loss": 91800.00
+  },
   "context": {
     "swept_level": 91950.00,
     "displacement": true
@@ -213,52 +213,20 @@ All context fields are optional but recommended for better AI analysis:
 - Displacement reversal
 - Clear invalidation level
 
-**Pine Script Example**:
-```javascript
-strategy.entry("Long", strategy.long)
-alert('{' +
-  '"symbol": "' + syminfo.ticker + '",' +
-  '"timeframe": "' + timeframe.period + '",' +
-  '"strategy": "Liquidity Sweeps",' +
-  '"event_type": "sweep",' +
-  '"direction": "bullish",' +
-  '"session": "' + session + '",' +
-  '"currentPrice": ' + str.tostring(close) + ',' +
-  '"sweptLevel": ' + str.tostring(swept_high) + ',' +
-  '"displacement": true' +
-'}', alert.freq_once_per_bar)
-```
-
-### 2. Candle 2 Closure RSI
+### 2. Candle 2 Closure
 
 **Profile**: 60-70% win rate, 1:2-1:3 risk:reward
 
 **Event Types**: `reversal`
 
 **Key Characteristics**:
-- RSI extreme (>70 or <30)
 - Two consecutive candles closing against trend
+- RSI extreme (>70 or <30)
 - Volume confirmation
-
-**Pine Script Example**:
-```javascript
-strategy.entry("Long", strategy.long)
-alert('{' +
-  '"symbol": "' + syminfo.ticker + '",' +
-  '"timeframe": "' + timeframe.period + '",' +
-  '"strategy": "Candle 2 Closure RSI",' +
-  '"event_type": "reversal",' +
-  '"direction": "bullish",' +
-  '"session": "' + session + '",' +
-  '"currentPrice": ' + str.tostring(close) + ',' +
-  '"suggestedStopLoss": ' + str.tostring(stop_loss) + ',' +
-  '"volumeSpike": ' + str.tostring(vol_spike) +
-'}', alert.freq_once_per_bar)
-```
 
 ### 3. Custom Strategies
 
-You can add your own strategies without code changes:
+You can add your own strategies:
 
 **Guidelines**:
 1. Choose a unique strategy name
@@ -266,51 +234,83 @@ You can add your own strategies without code changes:
 3. Provide contextual data
 4. System will adapt AI analysis automatically
 
-**Example - Breakout Strategy**:
-```json
-{
-  "symbol": "ETHUSDT",
-  "timeframe": "30",
-  "strategy": "Range Breakout Pro",
-  "event_type": "breakout",
-  "direction": "bullish",
-  "session": "NY",
-  "currentPrice": 2100.50,
-  "suggestedStopLoss": 2090.00,
-  "volumeSpike": true,
-  "displacement": true
+---
+
+## Pine Script Examples
+
+### Candle 2 Closure Strategy
+
+```javascript
+// In your Pine Script strategy
+if (reversal_signal) {
+    strategy.entry("Long", strategy.long)
+
+    alert('{' +
+      '"symbol": "' + syminfo.ticker + '",' +
+      '"timeframe": "' + timeframe.period + '",' +
+      '"strategy": "Candle 2 Closure",' +
+      '"event_type": "reversal",' +
+      '"direction": "bullish",' +
+      '"session": "London",' +
+      '"price": {' +
+        '"close": ' + str.tostring(close) + ',' +
+        '"stop_loss": ' + str.tostring(low[1]) +
+      '},' +
+      '"context": {' +
+        '"htf_bias": "bullish",' +
+        '"displacement": true,' +
+        '"volume_spike": ' + str.tostring(vol_spike) +
+      '}' +
+    '}', alert.freq_once_per_bar)
 }
 ```
 
----
+### Liquidity Sweeps Strategy
 
-## AI Analysis Adaptation
+```javascript
+// In your Pine Script strategy
+if (sweep_detected) {
+    strategy.entry("Long", strategy.long)
 
-The AI analysis automatically adapts based on strategy and event type:
-
-### Strategy-Specific Analysis
-
-Each strategy gets tailored AI prompts:
-
+    alert('{' +
+      '"symbol": "' + syminfo.ticker + '",' +
+      '"timeframe": "' + timeframe.period + '",' +
+      '"strategy": "Liquidity Sweeps",' +
+      '"event_type": "sweep",' +
+      '"direction": "bullish",' +
+      '"session": "NY",' +
+      '"price": {' +
+        '"close": ' + str.tostring(close) + ',' +
+        '"stop_loss": ' + str.tostring(stop_price) +
+      '},' +
+      '"context": {' +
+        '"swept_level": ' + str.tostring(swept_high) + ',' +
+        '"htf_bias": "bullish",' +
+        '"displacement": true,' +
+        '"volume_spike": true' +
+      '}' +
+    '}', alert.freq_once_per_bar)
+}
 ```
-Strategy: Liquidity Sweeps
-→ AI focuses on: swept levels, displacement, reversal confirmation
 
-Strategy: Candle 2 Closure RSI
-→ AI focuses on: RSI extremes, candle pattern quality, volume
+### Simple Strategy (Minimal)
 
-Strategy: Custom Breakout
-→ AI focuses on: consolidation quality, volume surge, momentum
+```javascript
+// Minimal required fields
+if (signal) {
+    alert('{' +
+      '"symbol": "' + syminfo.ticker + '",' +
+      '"timeframe": "' + timeframe.period + '",' +
+      '"strategy": "My Strategy",' +
+      '"event_type": "reversal",' +
+      '"direction": "bullish",' +
+      '"session": "London",' +
+      '"price": {' +
+        '"close": ' + str.tostring(close) +
+      '}' +
+    '}', alert.freq_once_per_bar)
+}
 ```
-
-### Event Type Analysis
-
-Event type determines what AI looks for:
-
-- **Reversal**: Exhaustion signals, divergence, reversal pattern quality
-- **Continuation**: Trend strength, pullback quality, resumption confirmation
-- **Breakout**: Consolidation tightness, volume surge, momentum strength
-- **Sweep**: Swept level significance, reversal displacement, invalidation clarity
 
 ---
 
@@ -324,8 +324,8 @@ Event type determines what AI looks for:
   "status": "ACCEPTED",
   "message": "Webhook received and processing started",
   "symbol": "BTCUSDT",
-  "strategy": "Liquidity Sweeps",
-  "event_type": "sweep",
+  "strategy": "Candle 2 Closure",
+  "event_type": "reversal",
   "direction": "bullish"
 }
 ```
@@ -343,30 +343,7 @@ The webhook is processed asynchronously:
 
 ## Testing
 
-### cURL Test - Universal Schema
-
-```bash
-curl -X POST http://localhost:8080/api/webhook/tradingview \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-secret-api-key" \
-  -d '{
-    "symbol": "BTCUSDT",
-    "timeframe": "15",
-    "strategy": "Liquidity Sweeps",
-    "event_type": "sweep",
-    "direction": "bullish",
-    "session": "London",
-    "currentPrice": 92100.50,
-    "sweptLevel": 91950.00,
-    "displacement": true,
-    "volumeSpike": true,
-    "htfBias": "bullish"
-  }'
-```
-
-### Test Endpoint
-
-Use `/api/webhook/test` for synchronous testing:
+### cURL Test
 
 ```bash
 curl -X POST http://localhost:8080/api/webhook/test \
@@ -374,51 +351,58 @@ curl -X POST http://localhost:8080/api/webhook/test \
   -H "X-API-Key: your-secret-api-key" \
   -d '{
     "symbol": "BTCUSDT",
-    "strategy": "Liquidity Sweeps",
-    "event_type": "sweep",
+    "timeframe": "15",
+    "strategy": "Candle 2 Closure",
+    "event_type": "reversal",
     "direction": "bullish",
-    ...
+    "session": "London",
+    "price": {
+      "close": 92100.50,
+      "stop_loss": 91800.00
+    },
+    "context": {
+      "htf_bias": "bullish",
+      "displacement": true
+    }
   }'
 ```
 
-Returns full `TradeSignal` object with AI analysis.
+### Test Script
+
+```bash
+cd test-payloads
+./test-webhook.sh
+```
 
 ---
 
-## Migration from Legacy Format
+## AI Analysis Adaptation
 
-### Legacy Format
+The AI analysis automatically adapts based on strategy and event type:
 
-```json
-{
-  "symbol": "BTCUSDT",
-  "timeframe": "5m",
-  "event": "liquidity_sweep_long",
-  "session": "NY",
-  "price": 43120.50,
-  "sweptHigh": 43150.00,
-  "displacementDetected": true,
-  "volumeSpike": true,
-  "htfBias": "bullish"
-}
+### Strategy-Specific Analysis
+
+Each strategy gets tailored AI prompts:
+
+```
+Strategy: Liquidity Sweeps
+→ AI focuses on: swept levels, displacement, reversal confirmation
+
+Strategy: Candle 2 Closure
+→ AI focuses on: candle pattern quality, volume, RSI extremes
+
+Strategy: Custom
+→ AI focuses on: generic event type criteria
 ```
 
-### Automatic Conversion
+### Event Type Analysis
 
-The system automatically converts legacy format:
+Event type determines what AI looks for:
 
-| Legacy Field | Universal Field |
-|--------------|-----------------|
-| `event` | Parsed to `strategy`, `event_type`, `direction` |
-| `price` | `currentPrice` |
-| `sweptHigh` / `sweptLow` | `sweptLevel` |
-| `displacementDetected` | `displacement` |
-
-### Migration Steps
-
-1. **Phase 1**: Both formats work (current)
-2. **Phase 2**: Update Pine Scripts to universal format
-3. **Phase 3**: Legacy format may be deprecated (with advance notice)
+- **Reversal**: Exhaustion signals, divergence, pattern quality
+- **Continuation**: Trend strength, pullback quality
+- **Breakout**: Consolidation quality, volume surge
+- **Sweep**: Swept level significance, reversal displacement
 
 ---
 
@@ -427,7 +411,7 @@ The system automatically converts legacy format:
 Signals are stored with universal schema fields:
 
 ```sql
--- New fields in journal_entries table
+-- Fields in journal_entries table
 strategy VARCHAR(100)          -- Strategy name
 event_type VARCHAR(50)         -- Event type
 swept_level DECIMAL(20, 8)    -- Swept price level
@@ -456,6 +440,20 @@ GROUP BY strategy, event_type;
 3. **Provide Context**: More context = better AI analysis
 4. **Test First**: Use `/test` endpoint before production
 5. **Monitor Performance**: Track by strategy/event type
+6. **Use Stop Loss**: Always include `stop_loss` in price object when available
+
+---
+
+## Validation Rules
+
+The system validates:
+
+- ✅ All required fields present
+- ✅ Event type is one of: reversal, continuation, breakout, sweep
+- ✅ Direction is either: bullish or bearish
+- ✅ Price object has `close` field
+- ✅ Numeric fields are valid numbers
+- ✅ Timestamp is valid ISO-8601 format (if provided)
 
 ---
 
@@ -467,4 +465,4 @@ GROUP BY strategy, event_type;
 
 ---
 
-**Ready to standardize your strategies! 🚀**
+**Clean, standardized, and extensible! 🚀**

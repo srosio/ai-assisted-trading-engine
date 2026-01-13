@@ -1,8 +1,10 @@
 {
+  "description": "Universal Trading Event Schema - Test Examples",
+  "format": "All examples use the nested price/context format",
   "examples": [
     {
-      "name": "Liquidity Sweep - Bullish (Nested Format - RECOMMENDED)",
-      "description": "Example of a liquidity sweep using preferred nested price/context format",
+      "name": "Liquidity Sweep - Bullish",
+      "description": "Liquidity sweep event with full context",
       "payload": {
         "symbol": "BTCUSDT",
         "timeframe": "15",
@@ -26,8 +28,8 @@
       }
     },
     {
-      "name": "Candle 2 Closure - Bearish Reversal (Nested Format - RECOMMENDED)",
-      "description": "Two-candle reversal pattern with nested format",
+      "name": "Candle 2 Closure - Bearish Reversal",
+      "description": "Two-candle reversal pattern",
       "payload": {
         "symbol": "ETHUSDT",
         "timeframe": "5",
@@ -48,12 +50,12 @@
       }
     },
     {
-      "name": "Breakout Strategy - Bullish (Nested Format)",
-      "description": "Range breakout with volume confirmation using nested format",
+      "name": "Breakout Strategy - Bullish",
+      "description": "Range breakout with volume confirmation",
       "payload": {
         "symbol": "SOLUSDT",
         "timeframe": "30",
-        "strategy": "Range Breakout Pro",
+        "strategy": "Range Breakout",
         "event_type": "breakout",
         "direction": "bullish",
         "session": "London",
@@ -72,8 +74,8 @@
       }
     },
     {
-      "name": "Continuation Strategy - Flat Format (Also Supported)",
-      "description": "Flat format still works for flexibility - fields auto-converted",
+      "name": "Continuation - Bullish Pullback",
+      "description": "Trend continuation after pullback",
       "payload": {
         "symbol": "BTCUSDT",
         "timeframe": "15",
@@ -81,29 +83,31 @@
         "event_type": "continuation",
         "direction": "bullish",
         "session": "NY",
-        "currentPrice": 93500.00,
-        "suggestedStopLoss": 93000.00,
-        "htfBias": "bullish",
-        "displacement": false,
-        "volumeSpike": true,
+        "price": {
+          "close": 93500.00,
+          "stop_loss": 93000.00
+        },
+        "context": {
+          "htf_bias": "bullish",
+          "displacement": false,
+          "volume_spike": true
+        },
         "timestamp": "2026-01-14T15:30:00Z"
       }
     },
     {
-      "name": "Legacy Format (Still Supported)",
-      "description": "Old format - automatically converted to universal schema",
+      "name": "Minimal Context Example",
+      "description": "Minimum required fields - context is optional",
       "payload": {
         "symbol": "BTCUSDT",
-        "timeframe": "5m",
-        "event": "liquidity_sweep_long",
-        "session": "NY",
-        "price": 43120.50,
-        "previousDayHigh": 43210.00,
-        "previousDayLow": 42880.00,
-        "volumeSpike": true,
-        "displacementDetected": true,
-        "htfBias": "bullish",
-        "sweptHigh": 43150.00
+        "timeframe": "5",
+        "strategy": "Simple Reversal",
+        "event_type": "reversal",
+        "direction": "bullish",
+        "session": "London",
+        "price": {
+          "close": 92500.00
+        }
       }
     }
   ],

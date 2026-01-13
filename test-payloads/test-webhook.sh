@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for Universal Trading Event Schema
-# Tests both nested (recommended) and flat formats
+# Tests nested format only
 
 API_URL="${API_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-your-api-key-here}"
@@ -14,9 +14,9 @@ echo "API URL: $API_URL"
 echo "Endpoint: /api/webhook/test"
 echo ""
 
-# Test 1: Nested Format (Recommended)
-echo "Test 1: Nested Format (Recommended)"
-echo "-----------------------------------"
+# Test 1: Candle 2 Closure - Reversal
+echo "Test 1: Candle 2 Closure - Bullish Reversal"
+echo "-------------------------------------------"
 curl -X POST "$API_URL/api/webhook/test" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
@@ -32,19 +32,17 @@ curl -X POST "$API_URL/api/webhook/test" \
     "stop_loss": 91800.00
   },
   "context": {
-    "swept_level": 91950.00,
     "htf_bias": "bullish",
     "displacement": true
-  },
-  "timestamp": "2026-01-14T10:30:00Z"
+  }
 }' | jq '.'
 
 echo ""
 echo ""
 
-# Test 2: Flat Format (Alternative)
-echo "Test 2: Flat Format (Alternative)"
-echo "----------------------------------"
+# Test 2: Liquidity Sweep
+echo "Test 2: Liquidity Sweeps - Bearish"
+echo "-----------------------------------"
 curl -X POST "$API_URL/api/webhook/test" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
@@ -55,35 +53,37 @@ curl -X POST "$API_URL/api/webhook/test" \
   "event_type": "sweep",
   "direction": "bearish",
   "session": "NY",
-  "currentPrice": 2050.75,
-  "suggestedStopLoss": 2045.00,
-  "sweptLevel": 2052.00,
-  "htfBias": "bearish",
-  "displacement": true,
-  "volumeSpike": true
+  "price": {
+    "close": 2050.75,
+    "stop_loss": 2065.00
+  },
+  "context": {
+    "swept_level": 2052.00,
+    "htf_bias": "bearish",
+    "displacement": true,
+    "volume_spike": true
+  }
 }' | jq '.'
 
 echo ""
 echo ""
 
-# Test 3: Legacy Format (Backward Compatible)
-echo "Test 3: Legacy Format (Backward Compatible)"
-echo "--------------------------------------------"
+# Test 3: Minimal Required Fields
+echo "Test 3: Minimal Required Fields"
+echo "--------------------------------"
 curl -X POST "$API_URL/api/webhook/test" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{
-  "symbol": "BTCUSDT",
-  "timeframe": "5m",
-  "event": "liquidity_sweep_long",
+  "symbol": "SOLUSDT",
+  "timeframe": "15",
+  "strategy": "Simple Reversal",
+  "event_type": "reversal",
+  "direction": "bullish",
   "session": "London",
-  "price": 43120.50,
-  "previousDayHigh": 43210.00,
-  "previousDayLow": 42880.00,
-  "volumeSpike": true,
-  "displacementDetected": true,
-  "htfBias": "bullish",
-  "sweptHigh": 43150.00
+  "price": {
+    "close": 105.50
+  }
 }' | jq '.'
 
 echo ""
