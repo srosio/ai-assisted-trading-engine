@@ -25,12 +25,11 @@ public class WebhookController {
     public ResponseEntity<?> receiveTradingViewWebhook(
             @Valid @RequestBody final TradingViewWebhook webhook) {
 
-        // Normalize legacy format to universal schema
-        webhook.normalizeLegacyFormat();
+        // Ensure timestamp is set
+        webhook.ensureTimestamp();
 
-        final String schemaType = webhook.isUniversalSchema() ? "universal" : "legacy";
-        log.info("Received TradingView webhook [{}] - Symbol: {}, Strategy: {}, Event: {}, Direction: {}, Session: {}",
-                schemaType, webhook.getSymbol(), webhook.getStrategy(),
+        log.info("Received TradingView webhook - Symbol: {}, Strategy: {}, Event: {}, Direction: {}, Session: {}",
+                webhook.getSymbol(), webhook.getStrategy(),
                 webhook.getEventType(), webhook.getDirection(), webhook.getSession());
 
         // Step 1: Ingress Layer - Validate payload
@@ -88,10 +87,10 @@ public class WebhookController {
 
     @PostMapping("/test")
     public ResponseEntity<?> testSignal(
-            @RequestBody final TradingViewWebhook webhook) {
+            @Valid @RequestBody final TradingViewWebhook webhook) {
 
-        // Normalize legacy format to universal schema
-        webhook.normalizeLegacyFormat();
+        // Ensure timestamp is set
+        webhook.ensureTimestamp();
 
         log.info("Test signal received - Symbol: {}, Strategy: {}, Event Type: {}, Direction: {}",
                 webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
