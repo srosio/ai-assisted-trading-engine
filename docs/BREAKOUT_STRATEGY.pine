@@ -1,0 +1,124 @@
+//@version=6
+indicator("Low Win Rate Breakout Strategy", overlay=true)
+
+// ============================================================================
+// STRATEGY: Low Win Rate Breakout (30-40% WR, 1:5-1:10+ R:R)
+// Explosive range breakouts with volume confirmation
+// Webhook-integrated with AI-Assisted Trading Engine
+// ============================================================================
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INPUTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Range Detection
+rangeLookback = input.int(30, "Range Lookback Bars", minval=10)
+rangeThreshold = input.float(0.5, "Range Threshold %", minval=0.1, maxval=2.0, step=0.1)
+
+// Volume Confirmation
+volSurgeMultiplier = input.float(3.0, "Volume Surge Multiplier", minval=2.0)
+
+// ATR for Volatility
+atrLength = input.int(14, "ATR Length", minval=1)
+
+// Webhook Settings
+webhookUrl = input.string("https://your-app.onrender.com/api/webhook/tradingview?apiKey=YOUR_KEY", "Webhook URL")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDICATORS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Range Detection
+rangeHigh = ta.highest(high, rangeLookback)
+rangeLow = ta.lowest(low, rangeLookback)
+rangeSize = rangeHigh - rangeLow
+avgRange = ta.sma(rangeSize, rangeLookback)
+
+// Consolidation = tight range (current range < threshold of average)
+isConsolidating = rangeSize < avgRange * (1 + rangeThreshold / 100)
+
+// ATR
+atr = ta.atr(atrLength)
+
+// Volume
+volSMA = ta.sma(volume, 20)
+volumeSurge = volume > volSMA * volSurgeMultiplier
+
+// Momentum (RSI)
+rsi = ta.rsi(close, 14)
+strongMomentum = rsi > 60 or rsi < 40
+
+// Previous Day High/Low
+var float pdHigh = na
+var float pdLow = na
+if ta.change(time('D'))
+    pdHigh := high[1]
+    pdLow := low[1]
+
+// Session Detection
+is_london = hour(time, "America/New_York") >= 3 and hour(time, "America/New_York") < 8
+is_ny = hour(time, "America/New_York") >= 8 and hour(time, "America/New_York") < 16
+is_asia = hour(time, "America/New_York") >= 20 or hour(time, "America/New_York") < 3
+
+session = is_london ? "LONDON_OPEN" : is_ny ? "NY_OPEN" : is_asia ? "ASIA_OPEN" : "OFF_SESSION"
+
+// HTF Bias (Daily timeframe)
+htf_high = request.security(syminfo.tickerid, "D", high[1])
+htf_low = request.security(syminfo.tickerid, "D", low[1])
+htfBias = close > htf_high ? "BULLISH" : close < htf_low ? "BEARISH" : "NEUTRAL"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STRATEGY LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Upside Breakout
+bullBreakout = isConsolidating[1] and close > rangeHigh[1] and volumeSurge and strongMomentum
+bullConfirmed = bullBreakout and close > open and (close - open) > atr * 0.5
+
+// Downside Breakout
+bearBreakout = isConsolidating[1] and close < rangeLow[1] and volumeSurge and strongMomentum
+bearConfirmed = bearBreakout and close < open and (open - close) > atr * 0.5
+
+// Displacement Detection (explosive move)
+candleRange = high - low
+displacementDetected = candleRange > atr * 2.0
+
+// Swept Levels
+sweptHigh = high > rangeHigh[1] ? rangeHigh[1] : na
+sweptLow = low < rangeLow[1] ? rangeLow[1] : na
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLOTTING
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Range Box
+var line upperLine = na
+var line lowerLine = na
+var box rangeBox = na
+
+if isConsolidating
+    if na(rangeBox)
+        rangeBox := box.new(bar_index - rangeLookback, rangeHigh, bar_index, rangeLow,
+                            border_color=color.gray, bgcolor=color.new(color.gray, 90))
+    else
+        box.set_right(rangeBox, bar_index)
+        box.set_top(rangeBox, rangeHigh)
+        box.set_bottom(rangeBox, rangeLow)
+else
+    if not na(rangeBox)
+        rangeBox := na
+
+plotshape(bullConfirmed, "Breakout Long", shape.triangleup, location.belowbar, color.green, size=size.large)
+plotshape(bearConfirmed, "Breakout Short", shape.triangledown, location.abovebar, color.red, size=size.large)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALERTS & WEBHOOKS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Long Breakout Alert
+if bullConfirmed
+    alert('{"symbol":"' + syminfo.ticker + '", "timeframe":"' + timeframe.period + '", "event":"breakout_long_range_break", "session":"' + session + '", "price":' + str.tostring(close) + ', "previousDayHigh":' + str.tostring(pdHigh) + ', "previousDayLow":' + str.tostring(pdLow) + ', "volumeSpike":' + str.tostring(volumeSurge) + ', "displacementDetected":' + str.tostring(displacementDetected) + ', "sweptHigh":' + str.tostring(sweptHigh) + ', "sweptLow":null, "htfBias":"' + htfBias + '"}', alert.freq_once_per_bar_close)
+
+// Short Breakout Alert
+if bearConfirmed
+    alert('{"symbol":"' + syminfo.ticker + '", "timeframe":"' + timeframe.period + '", "event":"breakout_short_range_break", "session":"' + session + '", "price":' + str.tostring(close) + ', "previousDayHigh":' + str.tostring(pdHigh) + ', "previousDayLow":' + str.tostring(pdLow) + ', "volumeSpike":' + str.tostring(volumeSurge) + ', "displacementDetected":' + str.tostring(displacementDetected) + ', "sweptHigh":null, "sweptLow":' + str.tostring(sweptLow) + ', "htfBias":"' + htfBias + '"}', alert.freq_once_per_bar_close)
