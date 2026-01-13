@@ -1,0 +1,137 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//@version=6
+indicator("Liquidity Sweep Strategy [Universal Schema]", shorttitle="Liq Sweep Univ", overlay=true)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INPUTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+grp_piv = "Pivot Settings"
+pivotLookback = input.int(10, "Pivot Lookback", minval=3, group=grp_piv)
+sweepBuffer   = input.float(0.1, "Sweep Buffer %", minval=0.01, step=0.01, tooltip="Min distance past pivot to qualify as sweep", group=grp_piv)
+
+grp_flt = "Filters"
+displaceMultiplier = input.float(1.5, "Displacement ATR Multiplier", minval=1.0, group=grp_flt)
+volMultiplier      = input.float(2.0, "Volume Spike Multiplier", minval=1.0, group=grp_flt)
+htfSelection       = input.timeframe("60", "HTF Bias Timeframe", group=grp_flt)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALCULATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1. Pivot Detection
+pivotHigh = ta.pivothigh(high, pivotLookback, pivotLookback)
+pivotLow  = ta.pivotlow(low, pivotLookback, pivotLookback)
+
+var float lastPivotHigh = na
+var float lastPivotLow  = na
+var line lineHigh = na
+var line lineLow = na
+
+if not na(pivotHigh)
+    lastPivotHigh := pivotHigh
+    line.delete(lineHigh)
+    lineHigh := line.new(bar_index[pivotLookback], pivotHigh, bar_index, pivotHigh, color=color.new(color.red, 50), style=line.style_dashed)
+
+if not na(pivotLow)
+    lastPivotLow := pivotLow
+    line.delete(lineLow)
+    lineLow := line.new(bar_index[pivotLookback], pivotLow, bar_index, pivotLow, color=color.new(color.green, 50), style=line.style_dashed)
+
+if not na(lineHigh)
+    line.set_x2(lineHigh, bar_index)
+if not na(lineLow)
+    line.set_x2(lineLow, bar_index)
+
+// 2. Indicators
+atr = ta.atr(14)
+volSMA = ta.sma(volume, 20)
+volumeSpike = volume > volSMA * volMultiplier
+
+// 3. HTF Bias
+[htf_ema_20, htf_ema_50] = request.security(syminfo.tickerid, htfSelection, [ta.ema(close, 20), ta.ema(close, 50)])
+htfBias = htf_ema_20 > htf_ema_50 ? "bullish" : htf_ema_20 < htf_ema_50 ? "bearish" : "neutral"
+
+// 4. Session Logic (NY time)
+currentHour = hour(time, "America/New_York")
+is_london = currentHour >= 3 and currentHour < 8
+is_ny     = currentHour >= 8 and currentHour < 16
+is_asia   = currentHour >= 20 or currentHour < 3
+session   = is_london ? "London" : is_ny ? "New York" : is_asia ? "Asia" : "Off-Session"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SWEEP LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+
+sweepThreshold = sweepBuffer / 100
+
+// --- SHORT SETUP ---
+highSwept = not na(lastPivotHigh) and high > lastPivotHigh * (1 + sweepThreshold) and close < lastPivotHigh
+displacementDown = (open - close) > atr * displaceMultiplier
+shortSetup = highSwept and close < open and volumeSpike and displacementDown
+
+// --- LONG SETUP ---
+lowSwept = not na(lastPivotLow) and low < lastPivotLow * (1 - sweepThreshold) and close > lastPivotLow
+displacementUp = (close - open) > atr * displaceMultiplier
+longSetup = lowSwept and close > open and volumeSpike and displacementUp
+
+// Capture levels for JSON
+var float sweptLevel_H = na
+var float sweptLevel_L = na
+if shortSetup
+    sweptLevel_H := lastPivotHigh
+if longSetup
+    sweptLevel_L := lastPivotLow
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLOTTING
+// ─────────────────────────────────────────────────────────────────────────────
+
+plotshape(longSetup, "Long Sweep", shape.triangleup, location.belowbar, color.green, size=size.large, text="SWEEP")
+plotshape(shortSetup, "Short Sweep", shape.triangledown, location.abovebar, color.red, size=size.large, text="SWEEP")
+
+bgcolor(shortSetup ? color.new(color.red, 90) : na)
+bgcolor(longSetup ? color.new(color.green, 90) : na)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIVERSAL SCHEMA ALERTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Function to generate the Universal Event Schema JSON
+alert_json_universal(string direction, float close_price, float sl_price, string htf, string sess, float swept_level) =>
+    // Convert direction to schema standard
+    string dir_std = (direction == "long") ? "bullish" : "bearish"
+
+    // Generate ISO 8601 Timestamp
+    string time_iso = str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'")
+
+    string json_msg = '{' +
+      '"symbol": "' + syminfo.ticker + '", ' +
+      '"timeframe": "' + timeframe.period + '", ' +
+      '"strategy": "Liquidity Sweeps", ' +
+      '"event_type": "reversal", ' +
+      '"direction": "' + dir_std + '", ' +
+      '"session": "' + sess + '", ' +
+      '"price": {' +
+          '"close": ' + str.tostring(close_price) + ', ' +
+          '"stop_loss": ' + str.tostring(sl_price) +
+      '}, ' +
+      '"context": {' +
+          '"swept_level": ' + (na(swept_level) ? "null" : str.tostring(swept_level)) + ', ' +
+          '"htf_bias": "' + htf + '", ' +
+          '"displacement": true' +
+      '}, ' +
+      '"timestamp": "' + time_iso + '"' +
+      '}'
+    json_msg
+
+// Trigger Alerts
+if longSetup
+    // SL for Long is the Low of the reversal candle
+    alert(alert_json_universal("long", close, low, htfBias, session, sweptLevel_L), alert.freq_once_per_bar_close)
+
+if shortSetup
+    // SL for Short is the High of the reversal candle
+    alert(alert_json_universal("short", close, high, htfBias, session, sweptLevel_H), alert.freq_once_per_bar_close)
