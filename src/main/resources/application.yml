@@ -67,11 +67,13 @@ claude:
   timeout-seconds: 30
 
 # Binance Configuration
+# Note: Rate limiting is automatically enforced (1200 weight/minute)
+# The system monitors X-MBX-USED-WEIGHT headers and implements back-off for 418/429 errors
 binance:
   api-key: ${BINANCE_API_KEY:mock-key}
   api-secret: ${BINANCE_API_SECRET:mock-secret}
   base-url: https://fapi.binance.com
-  cache-seconds: 10
+  cache-seconds: 10  # Redis cache TTL reduces API calls
   timeout-seconds: 10
 
 # Telegram Configuration
