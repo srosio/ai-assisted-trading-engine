@@ -21,18 +21,51 @@ public class ContextBuilderService {
 
         final var symbol = webhook.getSymbol();
 
-        final var currentPrice = marketDataService.getCurrentPrice(symbol);
-        final var oiChange = marketDataService.getOpenInterestChangePercent(symbol);
-        final var fundingRate = marketDataService.getFundingRate(symbol);
-        final var volatility = marketDataService.getVolatilityState(symbol);
-        final var atr = marketDataService.getATR(symbol, 14);
+        // Try Binance API, fallback to webhook data
+        BigDecimal currentPrice = webhook.getPrice();
+        Double oiChange = BigDecimal.ZERO.doubleValue();
+        BigDecimal fundingRate = BigDecimal.ZERO;
+        String volatility = "normal";
+        BigDecimal atr = BigDecimal.ZERO;
+
+        try {
+            final var binancePrice = marketDataService.getCurrentPrice(symbol);
+            if (binancePrice != null && binancePrice.compareTo(BigDecimal.ZERO) > 0) {
+                currentPrice = binancePrice;
+            }
+
+            final var binanceOI = marketDataService.getOpenInterestChangePercent(symbol);
+            if (binanceOI != null) {
+                oiChange = binanceOI;
+            }
+
+            final var binanceFunding = marketDataService.getFundingRate(symbol);
+            if (binanceFunding != null) {
+                fundingRate = binanceFunding;
+            }
+
+            final var binanceVolatility = marketDataService.getVolatilityState(symbol);
+            if (binanceVolatility != null && !binanceVolatility.equals("unknown")) {
+                volatility = binanceVolatility;
+            }
+
+            final var binanceATR = marketDataService.getATR(symbol, 14);
+            if (binanceATR != null && binanceATR.compareTo(BigDecimal.ZERO) > 0) {
+                atr = binanceATR;
+            }
+
+            log.info("Market data from Binance: price={}, OI={}%, volatility={}", currentPrice, oiChange, volatility);
+        } catch (final Exception e) {
+            log.warn("Binance API unavailable, using webhook data only: {}", e.getMessage());
+        }
 
         final var pdHigh = webhook.getPreviousDayHigh() != null
                 ? webhook.getPreviousDayHigh()
-                : marketDataService.get24hHigh(symbol);
+                : currentPrice.multiply(new BigDecimal("1.01")); // Fallback: 1% above current
+
         final var pdLow = webhook.getPreviousDayLow() != null
                 ? webhook.getPreviousDayLow()
-                : marketDataService.get24hLow(symbol);
+                : currentPrice.multiply(new BigDecimal("0.99")); // Fallback: 1% below current
 
         final var location = determineLocation(currentPrice, pdHigh, pdLow);
 
@@ -78,19 +111,24 @@ public class ContextBuilderService {
     }
 
     public boolean isContextValid(final MarketContext context) {
-        if (context.getCurrentPrice() == null || context.getCurrentPrice().compareTo(BigDecimal.ZERO) == 0) {
-            log.warn("Invalid context: missing or zero price");
+        // Only check essential fields - price and symbol
+        if (context.getCurrentPrice() == null || context.getCurrentPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("Invalid context: missing or invalid price");
             return false;
         }
 
-        if (context.getOiChangePercent() == null) {
-            log.warn("Invalid context: missing OI data");
+        if (context.getSymbol() == null || context.getSymbol().isEmpty()) {
+            log.warn("Invalid context: missing symbol");
             return false;
+        }
+
+        // OI and volatility are nice-to-have but not required (can use fallback values)
+        if (context.getOiChangePercent() == null) {
+            log.info("Using fallback OI value (0%) - Binance data unavailable");
         }
 
         if (context.getVolatility() == null || context.getVolatility().equals("unknown")) {
-            log.warn("Invalid context: volatility calculation failed");
-            return false;
+            log.info("Using fallback volatility (normal) - Binance data unavailable");
         }
 
         return true;
