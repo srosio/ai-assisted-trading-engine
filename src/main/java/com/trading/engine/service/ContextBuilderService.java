@@ -41,7 +41,7 @@ public class ContextBuilderService {
 
             final var binanceFunding = marketDataService.getFundingRate(symbol);
             if (binanceFunding != null) {
-                fundingRate = binanceFunding;
+                fundingRate = BigDecimal.valueOf(binanceFunding);
             }
 
             final var binanceVolatility = marketDataService.getVolatilityState(symbol);
@@ -75,7 +75,7 @@ public class ContextBuilderService {
                 .location(location)
                 .session(webhook.getSession())
                 .oiChangePercent(oiChange)
-                .fundingRate(fundingRate)
+                .fundingRate(fundingRate.doubleValue())
                 .liquidityEvent(webhook.getEvent())
                 .volatility(volatility)
                 .currentPrice(currentPrice)
