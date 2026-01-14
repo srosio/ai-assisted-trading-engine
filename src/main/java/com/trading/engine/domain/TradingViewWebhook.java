@@ -33,7 +33,7 @@ public class TradingViewWebhook {
     private String strategy;
 
     @NotBlank(message = "Event type is required")
-    @JsonProperty("event_type")
+    @JsonProperty("eventType")
     @Pattern(regexp = "reversal|continuation|breakout|sweep",
              message = "Event type must be: reversal, continuation, breakout, or sweep")
     private String eventType;
@@ -65,10 +65,9 @@ public class TradingViewWebhook {
     public static class PriceInfo {
 
         @NotNull(message = "Close price is required")
-        @JsonProperty("close")
         private BigDecimal close;
 
-        @JsonProperty("stop_loss")
+        @JsonProperty("stopLoss")
         private BigDecimal stopLoss;
     }
 
@@ -81,22 +80,21 @@ public class TradingViewWebhook {
     @AllArgsConstructor
     public static class ContextInfo {
 
-        @JsonProperty("swept_level")
+        @JsonProperty("sweptLevel")
         private BigDecimal sweptLevel;
 
-        @JsonProperty("htf_bias")
+        @JsonProperty("htfBias")
         private String htfBias;
 
-        @JsonProperty("displacement")
         private Boolean displacement;
 
-        @JsonProperty("volume_spike")
+        @JsonProperty("volumeSpike")
         private Boolean volumeSpike;
 
-        @JsonProperty("previous_day_high")
+        @JsonProperty("previousDayHigh")
         private BigDecimal previousDayHigh;
 
-        @JsonProperty("previous_day_low")
+        @JsonProperty("previousDayLow")
         private BigDecimal previousDayLow;
     }
 
