@@ -90,17 +90,17 @@ get_json(string _direction, string _eventType, float _price, float _sl, float _s
       '{' +
       '"symbol": "' + syminfo.ticker + '", ' +
       '"timeframe": "' + timeframe.period + '", ' +
-      '"strategy": "Candle_2_Closure", ' +
-      '"event_type": "' + _eventType + '", ' +
+      '"strategy": "Candle 2 Closure", ' +
+      '"eventType": "' + _eventType + '", ' +
       '"direction": "' + _direction + '", ' +
       '"session": "' + _sess + '", ' +
       '"price": {' +
           '"close": ' + str.tostring(_price) + ', ' +
-          '"stop_loss": ' + str.tostring(_sl) +
+          '"stopLoss": ' + str.tostring(_sl) +
       '}, ' +
       '"context": {' +
-          '"swept_level": ' + (na(_sweptLevel) ? "null" : str.tostring(_sweptLevel)) + ', ' +
-          '"htf_bias": "' + _htfBias + '", ' +
+          '"sweptLevel": ' + (na(_sweptLevel) ? "null" : str.tostring(_sweptLevel)) + ', ' +
+          '"htfBias": "' + _htfBias + '", ' +
           '"displacement": true' +
       '}, ' +
       '"timestamp": "' + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss", "UTC") + '"' +

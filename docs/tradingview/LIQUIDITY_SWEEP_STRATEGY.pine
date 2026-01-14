@@ -111,16 +111,16 @@ alert_json_universal(string direction, float close_price, float sl_price, string
       '"symbol": "' + syminfo.ticker + '", ' +
       '"timeframe": "' + timeframe.period + '", ' +
       '"strategy": "Liquidity Sweeps", ' +
-      '"event_type": "reversal", ' +
+      '"eventType": "reversal", ' +
       '"direction": "' + dir_std + '", ' +
       '"session": "' + sess + '", ' +
       '"price": {' +
           '"close": ' + str.tostring(close_price) + ', ' +
-          '"stop_loss": ' + str.tostring(sl_price) +
+          '"stopLoss": ' + str.tostring(sl_price) +
       '}, ' +
       '"context": {' +
-          '"swept_level": ' + (na(swept_level) ? "null" : str.tostring(swept_level)) + ', ' +
-          '"htf_bias": "' + htf + '", ' +
+          '"sweptLevel": ' + (na(swept_level) ? "null" : str.tostring(swept_level)) + ', ' +
+          '"htfBias": "' + htf + '", ' +
           '"displacement": true' +
       '}, ' +
       '"timestamp": "' + time_iso + '"' +
