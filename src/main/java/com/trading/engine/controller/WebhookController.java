@@ -80,6 +80,11 @@ public class WebhookController {
         return ResponseEntity.ok(status);
     }
 
+    @GetMapping("/ping")
+    public ResponseEntity<String> ping() {
+        return ResponseEntity.ok("Pong!");
+    }
+
     @PostMapping("/test")
     public ResponseEntity<?> testSignal(
             @RequestBody final TradingViewWebhook webhook) {
