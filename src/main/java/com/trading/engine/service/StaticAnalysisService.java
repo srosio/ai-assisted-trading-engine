@@ -80,19 +80,30 @@ public class StaticAnalysisService {
                                            final TradingViewWebhook webhook) {
         var score = 0;
 
-        // Volume confirmation (20 points)
+        // Volume confirmation (15 points)
         if (Boolean.TRUE.equals(webhook.getVolumeSpike())) {
-            score += 20;
+            score += 15;
         }
 
-        // Displacement detection (20 points)
-        if (Boolean.TRUE.equals(webhook.getDisplacementDetected())) {
-            score += 20;
+        // Displacement detection (15 points)
+        if (Boolean.TRUE.equals(webhook.getDisplacement())) {
+            score += 15;
         }
 
-        // OI alignment (20 points)
+        // HTF bias alignment (15 points)
+        if (webhook.getHtfBias() != null && webhook.getDirection() != null) {
+            final var htfBias = webhook.getHtfBias().toLowerCase();
+            final var direction = webhook.getDirection().toLowerCase();
+            if (htfBias.equals(direction)) {
+                score += 15; // HTF and signal direction aligned
+            } else {
+                score -= 5; // Counter-HTF setup (more risk)
+            }
+        }
+
+        // OI alignment (15 points)
         if (context.getOiChangePercent() != null && Math.abs(context.getOiChangePercent()) > 2.0) {
-            score += 20;
+            score += 15;
         }
 
         // Intraday confidence (20 points)
@@ -100,11 +111,30 @@ public class StaticAnalysisService {
             score += (intradayContext.getConfidenceScore() / 5); // Scale to 20
         }
 
-        // Volatility check (20 points)
+        // Volatility check (10 points)
         if ("normal".equals(context.getVolatility())) {
-            score += 20;
+            score += 10;
         } else if ("high".equals(context.getVolatility())) {
-            score += 10; // Half points for high volatility
+            score += 5; // Half points for high volatility
+        }
+
+        // Strategy-specific bonus (10 points)
+        if (webhook.getStrategy() != null) {
+            final var strategy = webhook.getStrategy().toLowerCase();
+            final var eventType = webhook.getEventType() != null ? webhook.getEventType().toLowerCase() : "";
+
+            // Candle 2 Closure has high win rate
+            if (strategy.contains("candle") && "reversal".equals(eventType)) {
+                score += 10;
+            }
+            // Liquidity sweeps with swept level confirmation
+            else if (strategy.contains("liquidity") && webhook.getSweptLevel() != null) {
+                score += 10;
+            }
+            // Breakout with volume spike
+            else if ("breakout".equals(eventType) && Boolean.TRUE.equals(webhook.getVolumeSpike())) {
+                score += 10;
+            }
         }
 
         // Classify based on score
@@ -166,32 +196,46 @@ public class StaticAnalysisService {
         if (context.getFundingRate() != null) {
             final var fundingAbs = Math.abs(context.getFundingRate());
             if (fundingAbs > 0.001) {
-                risks.add(String.format("Extreme funding rate: %.4f%%", context.getFundingRate() * 100));
+                risks.add(String.format("Extreme funding rate: %.4f%% - high risk of unwind", context.getFundingRate() * 100));
             } else if (fundingAbs > 0.0005) {
-                risks.add(String.format("Elevated funding rate: %.4f%%", context.getFundingRate() * 100));
+                risks.add(String.format("Elevated funding rate: %.4f%% - monitor closely", context.getFundingRate() * 100));
             }
         }
 
         // Volatility risks
         if ("high".equals(context.getVolatility())) {
-            risks.add("High volatility environment - wider stops required");
+            risks.add("High volatility environment - wider stops required, reduce position size");
         } else if ("extreme".equals(context.getVolatility())) {
-            risks.add("Extreme volatility - significant slippage risk");
+            risks.add("Extreme volatility - significant slippage risk, consider avoiding trade");
         }
 
         // OI risks
-        if (context.getOiChangePercent() != null && Math.abs(context.getOiChangePercent()) > 10.0) {
-            risks.add(String.format("Extreme OI change: %.1f%% - potential manipulation", context.getOiChangePercent()));
+        if (context.getOiChangePercent() != null) {
+            if (Math.abs(context.getOiChangePercent()) > 10.0) {
+                risks.add(String.format("Extreme OI change: %.1f%% - potential manipulation or stop hunt", context.getOiChangePercent()));
+            } else if (Math.abs(context.getOiChangePercent()) < 0.5) {
+                risks.add("Very low OI change - lack of conviction, weak setup");
+            }
         }
 
         // Low confidence warning
         if (intradayContext != null && intradayContext.getConfidenceScore() != null &&
             intradayContext.getConfidenceScore() < 50) {
-            risks.add("Low intraday confidence score - setup lacks confirmation");
+            risks.add(String.format("Low intraday confidence: %d/100 - setup lacks confirmation",
+                    intradayContext.getConfidenceScore()));
+        }
+
+        // Missing context data
+        if (context.getVolumeSpike() != null && !context.getVolumeSpike()) {
+            risks.add("No volume spike detected - breakout may be weak");
+        }
+
+        if (context.getDisplacementDetected() != null && !context.getDisplacementDetected()) {
+            risks.add("No displacement detected - may lack momentum for follow-through");
         }
 
         if (risks.isEmpty()) {
-            risks.add("No major quantitative risks identified");
+            risks.add("No major quantitative risks identified - standard trade management applies");
         }
 
         return risks;
@@ -219,15 +263,19 @@ public class StaticAnalysisService {
 
     private String generateSummary(final String quality, final MarketContext context,
                                      final IntradayContext intradayContext) {
+        final var oiChange = context.getOiChangePercent() != null ? context.getOiChangePercent() : 0.0;
+        final var confidence = intradayContext != null && intradayContext.getConfidenceScore() != null ?
+                intradayContext.getConfidenceScore() : 0;
+
         return String.format(
-                "Static analysis (AI unavailable): Setup quality %s based on quantitative metrics. " +
-                "OI: %.1f%%, Volatility: %s, Confidence: %d/100. " +
-                "Decision based on market microstructure data from Binance and TradingView.",
+                "Static quantitative analysis (AI unavailable): Setup quality rated %s based on market metrics. " +
+                "Open Interest: %.1f%%, Volatility: %s, Intraday Confidence: %d/100. " +
+                "Analysis uses Binance derivatives data and TradingView price action. " +
+                "Manual verification recommended before execution.",
                 quality,
-                context.getOiChangePercent() != null ? context.getOiChangePercent() : 0.0,
+                oiChange,
                 context.getVolatility(),
-                intradayContext != null && intradayContext.getConfidenceScore() != null ?
-                        intradayContext.getConfidenceScore() : 0
+                confidence
         );
     }
 
@@ -248,22 +296,37 @@ public class StaticAnalysisService {
     }
 
     private String determineExecutionModel(final IntradayContext intradayContext, final String strategyName) {
-        // Scalping strategies prefer limit orders
-        if (strategyName.contains("Scalping")) {
+        final var strategy = strategyName != null ? strategyName.toLowerCase() : "";
+
+        // Scalping strategies prefer limit orders for better price
+        if (strategy.contains("scalp")) {
             return "limit";
         }
 
-        // Breakout strategies prefer market orders for momentum
-        if (strategyName.contains("Breakout")) {
+        // Breakout strategies prefer market orders for momentum capture
+        if (strategy.contains("breakout")) {
             return "market";
         }
 
-        // Use volume confirmation to decide
+        // Candle closure patterns: limit orders at pattern completion
+        if (strategy.contains("candle") || strategy.contains("closure")) {
+            return "limit";
+        }
+
+        // Liquidity sweeps: can use market if strong displacement
+        if (strategy.contains("liquidity") || strategy.contains("sweep")) {
+            if (intradayContext != null && "confirmed".equals(intradayContext.getVolumeConfirmation())) {
+                return "market"; // Strong sweep, take market
+            }
+            return "limit"; // Weak sweep, wait for better price
+        }
+
+        // Use volume confirmation to decide for unknown strategies
         if (intradayContext != null && "confirmed".equals(intradayContext.getVolumeConfirmation())) {
             return "market";
         }
 
-        // Default to limit for better price
+        // Default to limit for better price execution
         return "limit";
     }
 
@@ -295,18 +358,42 @@ public class StaticAnalysisService {
         final var currentPrice = context.getCurrentPrice();
         final var atr = context.getAtrValue() != null ? context.getAtrValue() : currentPrice.multiply(new BigDecimal("0.01"));
 
-        // Use swept levels if available
-        if (direction.equals("LONG") && webhook.getSweptLow() != null) {
-            return webhook.getSweptLow().subtract(atr.multiply(new BigDecimal("0.5"))).setScale(2, RoundingMode.HALF_UP);
-        } else if (direction.equals("SHORT") && webhook.getSweptHigh() != null) {
-            return webhook.getSweptHigh().add(atr.multiply(new BigDecimal("0.5"))).setScale(2, RoundingMode.HALF_UP);
+        // First priority: Use webhook suggested stop loss if available
+        if (webhook.getSuggestedStopLoss() != null) {
+            return webhook.getSuggestedStopLoss().setScale(2, RoundingMode.HALF_UP);
         }
 
-        // Fallback: 1.5 ATR stop
+        // Second priority: Use swept level with buffer
+        if (webhook.getSweptLevel() != null) {
+            final var buffer = atr.multiply(new BigDecimal("0.3"));
+            if (direction.equals("LONG")) {
+                // For longs, stop below swept level
+                return webhook.getSweptLevel().subtract(buffer).setScale(2, RoundingMode.HALF_UP);
+            } else {
+                // For shorts, stop above swept level
+                return webhook.getSweptLevel().add(buffer).setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+
+        // Fallback: Strategy-specific ATR multiplier
+        BigDecimal atrMultiplier = new BigDecimal("1.5"); // Default
+
+        if (webhook.getStrategy() != null) {
+            final var strategy = webhook.getStrategy().toLowerCase();
+            if (strategy.contains("candle") || strategy.contains("scalp")) {
+                atrMultiplier = new BigDecimal("1.0"); // Tight stops for scalping/reversal patterns
+            } else if (strategy.contains("breakout")) {
+                atrMultiplier = new BigDecimal("2.0"); // Wider stops for breakouts
+            } else if (strategy.contains("liquidity")) {
+                atrMultiplier = new BigDecimal("1.5"); // Standard for liquidity sweeps
+            }
+        }
+
+        // Apply ATR-based stop
         if (direction.equals("LONG")) {
-            return currentPrice.subtract(atr.multiply(new BigDecimal("1.5"))).setScale(2, RoundingMode.HALF_UP);
+            return currentPrice.subtract(atr.multiply(atrMultiplier)).setScale(2, RoundingMode.HALF_UP);
         } else {
-            return currentPrice.add(atr.multiply(new BigDecimal("1.5"))).setScale(2, RoundingMode.HALF_UP);
+            return currentPrice.add(atr.multiply(atrMultiplier)).setScale(2, RoundingMode.HALF_UP);
         }
     }
 
@@ -319,24 +406,32 @@ public class StaticAnalysisService {
 
         final var targets = new ArrayList<ExecutionPlan.Target>();
 
-        // Strategy-specific R:R ratios
-        if (strategyName.contains("Scalping")) {
-            // 1R and 2R for scalping
-            targets.add(createTarget(currentPrice, risk, 1.0, direction, "Quick profit - BB middle"));
-            targets.add(createTarget(currentPrice, risk, 2.0, direction, "Extended target - BB opposite"));
-        } else if (strategyName.contains("Breakout")) {
-            // 5R and 10R for breakouts
+        // Strategy-specific R:R ratios based on documented win rates
+        if (strategyName.toLowerCase().contains("candle") || strategyName.toLowerCase().contains("closure")) {
+            // Candle 2 Closure: 60-70% WR, 1:2-1:3 R:R
+            targets.add(createTarget(currentPrice, risk, 2.0, direction, "First target - pattern completion"));
+            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Extended target - structure level"));
+        } else if (strategyName.toLowerCase().contains("liquidity") || strategyName.toLowerCase().contains("sweep")) {
+            // Liquidity Sweeps: 45-55% WR, 1:3-1:5 R:R
+            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Previous structure / opposite sweep"));
+            targets.add(createTarget(currentPrice, risk, 5.0, direction, "Major level / extended sweep"));
+        } else if (strategyName.toLowerCase().contains("breakout")) {
+            // Breakout: 30-40% WR, 1:5-1:10+ R:R
             targets.add(createTarget(currentPrice, risk, 5.0, direction, "Measured move"));
-            targets.add(createTarget(currentPrice, risk, 10.0, direction, "Extended breakout"));
-        } else if (strategyName.contains("Swing")) {
-            // 2R, 3R, 4R for swing
+            targets.add(createTarget(currentPrice, risk, 10.0, direction, "Extended breakout target"));
+        } else if (strategyName.toLowerCase().contains("scalp")) {
+            // Scalping: Higher WR, lower R:R
+            targets.add(createTarget(currentPrice, risk, 1.0, direction, "Quick profit"));
+            targets.add(createTarget(currentPrice, risk, 2.0, direction, "Extended scalp"));
+        } else if (strategyName.toLowerCase().contains("swing")) {
+            // Swing: 50-60% WR, 1:2-1:4 R:R
             targets.add(createTarget(currentPrice, risk, 2.0, direction, "First resistance"));
-            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Key level"));
+            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Key structure"));
             targets.add(createTarget(currentPrice, risk, 4.0, direction, "Extended swing"));
         } else {
-            // Default: Liquidity Sweep 3R and 5R
-            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Previous structure"));
-            targets.add(createTarget(currentPrice, risk, 5.0, direction, "Major level"));
+            // Generic/Unknown strategy: Conservative 1:2 and 1:3
+            targets.add(createTarget(currentPrice, risk, 2.0, direction, "Conservative target"));
+            targets.add(createTarget(currentPrice, risk, 3.0, direction, "Extended target"));
         }
 
         return targets;
@@ -359,12 +454,33 @@ public class StaticAnalysisService {
     }
 
     private String generateStopLogic(final TradingViewWebhook webhook, final String direction) {
-        if (direction.equals("LONG") && webhook.getSweptLow() != null) {
-            return "Below swept low + 0.5 ATR buffer";
-        } else if (direction.equals("SHORT") && webhook.getSweptHigh() != null) {
-            return "Above swept high + 0.5 ATR buffer";
+        // First: Check if webhook provides suggested stop loss
+        if (webhook.getSuggestedStopLoss() != null) {
+            return "Using strategy-suggested stop loss from webhook";
         }
-        return "1.5 ATR from entry - static calculation";
+
+        // Second: Check if swept level exists
+        if (webhook.getSweptLevel() != null) {
+            if (direction.equals("LONG")) {
+                return String.format("Below swept level (%.2f) + 0.3 ATR buffer", webhook.getSweptLevel());
+            } else {
+                return String.format("Above swept level (%.2f) + 0.3 ATR buffer", webhook.getSweptLevel());
+            }
+        }
+
+        // Fallback: Strategy-specific ATR-based logic
+        if (webhook.getStrategy() != null) {
+            final var strategy = webhook.getStrategy().toLowerCase();
+            if (strategy.contains("candle") || strategy.contains("scalp")) {
+                return "1.0 ATR from entry - tight stop for reversal pattern";
+            } else if (strategy.contains("breakout")) {
+                return "2.0 ATR from entry - wider stop for volatility expansion";
+            } else if (strategy.contains("liquidity")) {
+                return "1.5 ATR from entry - standard stop for sweep strategy";
+            }
+        }
+
+        return "1.5 ATR from entry - default static calculation";
     }
 
     private List<String> generateInvalidationConditions(final TradingViewWebhook webhook,
@@ -372,16 +488,49 @@ public class StaticAnalysisService {
                                                           final String direction) {
         final var conditions = new ArrayList<String>();
 
-        conditions.add("Stop loss hit");
-
-        if (direction.equals("LONG") && webhook.getSweptLow() != null) {
-            conditions.add("Price breaks below swept low: " + webhook.getSweptLow());
-        } else if (direction.equals("SHORT") && webhook.getSweptHigh() != null) {
-            conditions.add("Price breaks above swept high: " + webhook.getSweptHigh());
+        // Primary invalidation: Stop loss
+        if (webhook.getSuggestedStopLoss() != null) {
+            conditions.add(String.format("Stop loss hit at %.2f", webhook.getSuggestedStopLoss()));
+        } else {
+            conditions.add("Stop loss hit");
         }
 
-        conditions.add("Market structure break (higher low for short, lower high for long)");
-        conditions.add("Funding rate exceeds 0.2% (extreme positioning)");
+        // Swept level invalidation
+        if (webhook.getSweptLevel() != null) {
+            if (direction.equals("LONG")) {
+                conditions.add(String.format("Price breaks below swept level: %.2f", webhook.getSweptLevel()));
+            } else {
+                conditions.add(String.format("Price breaks above swept level: %.2f", webhook.getSweptLevel()));
+            }
+        }
+
+        // Structure invalidation
+        if (direction.equals("LONG")) {
+            conditions.add("Market structure break: Lower low below recent swing low");
+        } else {
+            conditions.add("Market structure break: Higher high above recent swing high");
+        }
+
+        // HTF bias change
+        if (webhook.getHtfBias() != null) {
+            conditions.add(String.format("HTF bias changes from %s - reassess trade validity", webhook.getHtfBias()));
+        }
+
+        // Strategy-specific invalidations
+        if (webhook.getStrategy() != null) {
+            final var strategy = webhook.getStrategy().toLowerCase();
+            if (strategy.contains("candle") || strategy.contains("closure")) {
+                conditions.add("Pattern failure: Next candle closes against setup");
+            } else if (strategy.contains("liquidity") || strategy.contains("sweep")) {
+                conditions.add("Re-sweep of same level - liquidity trap");
+            } else if (strategy.contains("breakout")) {
+                conditions.add("Failed breakout: Price returns inside range");
+            }
+        }
+
+        // Risk management invalidations
+        conditions.add("Funding rate exceeds 0.2% (extreme positioning risk)");
+        conditions.add("Volatility spikes to extreme levels (risk of stop hunt)");
 
         return conditions;
     }
