@@ -24,15 +24,15 @@ curl -X POST "$API_URL/api/webhook/test" \
   "symbol": "BTCUSDT",
   "timeframe": "15",
   "strategy": "Candle 2 Closure",
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish",
   "session": "London",
   "price": {
     "close": 92100.50,
-    "stop_loss": 91800.00
+    "stopLoss": 91800.00
   },
   "context": {
-    "htf_bias": "bullish",
+    "htfBias": "bullish",
     "displacement": true
   }
 }' | jq '.'
@@ -50,18 +50,18 @@ curl -X POST "$API_URL/api/webhook/test" \
   "symbol": "ETHUSDT",
   "timeframe": "5",
   "strategy": "Liquidity Sweeps",
-  "event_type": "sweep",
+  "eventType": "sweep",
   "direction": "bearish",
   "session": "NY",
   "price": {
     "close": 2050.75,
-    "stop_loss": 2065.00
+    "stopLoss": 2065.00
   },
   "context": {
-    "swept_level": 2052.00,
-    "htf_bias": "bearish",
+    "sweptLevel": 2052.00,
+    "htfBias": "bearish",
     "displacement": true,
-    "volume_spike": true
+    "volumeSpike": true
   }
 }' | jq '.'
 
@@ -78,7 +78,7 @@ curl -X POST "$API_URL/api/webhook/test" \
   "symbol": "SOLUSDT",
   "timeframe": "15",
   "strategy": "Simple Reversal",
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish",
   "session": "London",
   "price": {

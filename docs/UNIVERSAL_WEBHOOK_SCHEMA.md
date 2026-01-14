@@ -23,16 +23,16 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
   "symbol": "BTCUSDT",
   "timeframe": "15",
   "strategy": "Candle 2 Closure",
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish",
   "session": "London",
   "price": {
     "close": 92100.50,
-    "stop_loss": 91800.00
+    "stopLoss": 91800.00
   },
   "context": {
-    "swept_level": 91950.00,
-    "htf_bias": "bullish",
+    "sweptLevel": 91950.00,
+    "htfBias": "bullish",
     "displacement": true
   },
   "timestamp": "2026-01-14T10:30:00Z"
@@ -46,7 +46,7 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
   "symbol": "BTCUSDT",
   "timeframe": "15",
   "strategy": "Simple Reversal",
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish",
   "session": "London",
   "price": {
@@ -66,7 +66,7 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 | `symbol` | string | Required | Trading pair (e.g., "BTCUSDT") |
 | `timeframe` | string | Required | Chart timeframe (e.g., "5", "15", "1h") |
 | `strategy` | string | Required | Strategy name (e.g., "Liquidity Sweeps") |
-| `event_type` | string | Required | Must be: `reversal`, `continuation`, `breakout`, or `sweep` |
+| `eventType` | string | Required | Must be: `reversal`, `continuation`, `breakout`, or `sweep` |
 | `direction` | string | Required | Must be: `bullish` or `bearish` |
 | `session` | string | Required | Trading session: `London`, `NY`, or `Asia` |
 | `price` | object | Required | Price information (see below) |
@@ -78,18 +78,18 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `close` | number | Yes | Current close price |
-| `stop_loss` | number | No | Suggested stop loss from strategy |
+| `stopLoss` | number | No | Suggested stop loss from strategy |
 
 ### Context Object (Optional)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `swept_level` | number | Price level that was swept (for sweep events) |
-| `htf_bias` | string | Higher timeframe bias: `"bullish"` or `"bearish"` |
+| `sweptLevel` | number | Price level that was swept (for sweep events) |
+| `htfBias` | string | Higher timeframe bias: `"bullish"` or `"bearish"` |
 | `displacement` | boolean | Strong price movement detected |
-| `volume_spike` | boolean | Volume spike detected |
-| `previous_day_high` | number | Previous day high for reference |
-| `previous_day_low` | number | Previous day low for reference |
+| `volumeSpike` | boolean | Volume spike detected |
+| `previousDayHigh` | number | Previous day high for reference |
+| `previousDayLow` | number | Previous day low for reference |
 
 ---
 
@@ -108,15 +108,15 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 **Example**:
 ```json
 {
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish",
   "price": {
     "close": 92100.50,
-    "stop_loss": 91800.00
+    "stopLoss": 91800.00
   },
   "context": {
     "displacement": true,
-    "volume_spike": true
+    "volumeSpike": true
   }
 }
 ```
@@ -134,14 +134,14 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 **Example**:
 ```json
 {
-  "event_type": "continuation",
+  "eventType": "continuation",
   "direction": "bullish",
   "price": {
     "close": 93500.00,
-    "stop_loss": 93000.00
+    "stopLoss": 93000.00
   },
   "context": {
-    "htf_bias": "bullish"
+    "htfBias": "bullish"
   }
 }
 ```
@@ -159,14 +159,14 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 **Example**:
 ```json
 {
-  "event_type": "breakout",
+  "eventType": "breakout",
   "direction": "bullish",
   "price": {
     "close": 105.50,
-    "stop_loss": 103.00
+    "stopLoss": 103.00
   },
   "context": {
-    "volume_spike": true,
+    "volumeSpike": true,
     "displacement": true
   }
 }
@@ -185,14 +185,14 @@ The Universal Trading Event Schema provides a consistent, clean format for all t
 **Example**:
 ```json
 {
-  "event_type": "sweep",
+  "eventType": "sweep",
   "direction": "bullish",
   "price": {
     "close": 92100.50,
-    "stop_loss": 91800.00
+    "stopLoss": 91800.00
   },
   "context": {
-    "swept_level": 91950.00,
+    "sweptLevel": 91950.00,
     "displacement": true
   }
 }
@@ -249,17 +249,17 @@ if (reversal_signal) {
       '"symbol": "' + syminfo.ticker + '",' +
       '"timeframe": "' + timeframe.period + '",' +
       '"strategy": "Candle 2 Closure",' +
-      '"event_type": "reversal",' +
+      '"eventType": "reversal",' +
       '"direction": "bullish",' +
       '"session": "London",' +
       '"price": {' +
         '"close": ' + str.tostring(close) + ',' +
-        '"stop_loss": ' + str.tostring(low[1]) +
+        '"stopLoss": ' + str.tostring(low[1]) +
       '},' +
       '"context": {' +
-        '"htf_bias": "bullish",' +
+        '"htfBias": "bullish",' +
         '"displacement": true,' +
-        '"volume_spike": ' + str.tostring(vol_spike) +
+        '"volumeSpike": ' + str.tostring(vol_spike) +
       '}' +
     '}', alert.freq_once_per_bar)
 }
@@ -276,18 +276,18 @@ if (sweep_detected) {
       '"symbol": "' + syminfo.ticker + '",' +
       '"timeframe": "' + timeframe.period + '",' +
       '"strategy": "Liquidity Sweeps",' +
-      '"event_type": "sweep",' +
+      '"eventType": "sweep",' +
       '"direction": "bullish",' +
       '"session": "NY",' +
       '"price": {' +
         '"close": ' + str.tostring(close) + ',' +
-        '"stop_loss": ' + str.tostring(stop_price) +
+        '"stopLoss": ' + str.tostring(stop_price) +
       '},' +
       '"context": {' +
-        '"swept_level": ' + str.tostring(swept_high) + ',' +
-        '"htf_bias": "bullish",' +
+        '"sweptLevel": ' + str.tostring(swept_high) + ',' +
+        '"htfBias": "bullish",' +
         '"displacement": true,' +
-        '"volume_spike": true' +
+        '"volumeSpike": true' +
       '}' +
     '}', alert.freq_once_per_bar)
 }
@@ -302,7 +302,7 @@ if (signal) {
       '"symbol": "' + syminfo.ticker + '",' +
       '"timeframe": "' + timeframe.period + '",' +
       '"strategy": "My Strategy",' +
-      '"event_type": "reversal",' +
+      '"eventType": "reversal",' +
       '"direction": "bullish",' +
       '"session": "London",' +
       '"price": {' +
@@ -325,7 +325,7 @@ if (signal) {
   "message": "Webhook received and processing started",
   "symbol": "BTCUSDT",
   "strategy": "Candle 2 Closure",
-  "event_type": "reversal",
+  "eventType": "reversal",
   "direction": "bullish"
 }
 ```
@@ -353,15 +353,15 @@ curl -X POST http://localhost:8080/api/webhook/test \
     "symbol": "BTCUSDT",
     "timeframe": "15",
     "strategy": "Candle 2 Closure",
-    "event_type": "reversal",
+    "eventType": "reversal",
     "direction": "bullish",
     "session": "London",
     "price": {
       "close": 92100.50,
-      "stop_loss": 91800.00
+      "stopLoss": 91800.00
     },
     "context": {
-      "htf_bias": "bullish",
+      "htfBias": "bullish",
       "displacement": true
     }
   }'
@@ -440,7 +440,7 @@ GROUP BY strategy, event_type;
 3. **Provide Context**: More context = better AI analysis
 4. **Test First**: Use `/test` endpoint before production
 5. **Monitor Performance**: Track by strategy/event type
-6. **Use Stop Loss**: Always include `stop_loss` in price object when available
+6. **Use Stop Loss**: Always include `stopLoss` in price object when available
 
 ---
 

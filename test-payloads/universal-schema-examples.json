@@ -1,6 +1,6 @@
 {
-  "description": "Universal Trading Event Schema - Test Examples",
-  "format": "All examples use the nested price/context format",
+  "description": "Universal Trading Event Schema - Test Examples (camelCase)",
+  "format": "All examples use the nested price/context format with camelCase fields",
   "examples": [
     {
       "name": "Liquidity Sweep - Bullish",
@@ -9,20 +9,20 @@
         "symbol": "BTCUSDT",
         "timeframe": "15",
         "strategy": "Liquidity Sweeps",
-        "event_type": "sweep",
+        "eventType": "sweep",
         "direction": "bullish",
         "session": "London",
         "price": {
           "close": 92100.50,
-          "stop_loss": 91800.00
+          "stopLoss": 91800.00
         },
         "context": {
-          "swept_level": 91950.00,
-          "htf_bias": "bullish",
+          "sweptLevel": 91950.00,
+          "htfBias": "bullish",
           "displacement": true,
-          "volume_spike": true,
-          "previous_day_high": 92500.00,
-          "previous_day_low": 91500.00
+          "volumeSpike": true,
+          "previousDayHigh": 92500.00,
+          "previousDayLow": 91500.00
         },
         "timestamp": "2026-01-14T10:30:00Z"
       }
@@ -34,17 +34,17 @@
         "symbol": "ETHUSDT",
         "timeframe": "5",
         "strategy": "Candle 2 Closure",
-        "event_type": "reversal",
+        "eventType": "reversal",
         "direction": "bearish",
         "session": "NY",
         "price": {
           "close": 2050.75,
-          "stop_loss": 2065.00
+          "stopLoss": 2065.00
         },
         "context": {
-          "htf_bias": "bearish",
+          "htfBias": "bearish",
           "displacement": true,
-          "volume_spike": true
+          "volumeSpike": true
         },
         "timestamp": "2026-01-14T14:45:00Z"
       }
@@ -56,19 +56,19 @@
         "symbol": "SOLUSDT",
         "timeframe": "30",
         "strategy": "Range Breakout",
-        "event_type": "breakout",
+        "eventType": "breakout",
         "direction": "bullish",
         "session": "London",
         "price": {
           "close": 105.50,
-          "stop_loss": 103.00
+          "stopLoss": 103.00
         },
         "context": {
-          "htf_bias": "bullish",
+          "htfBias": "bullish",
           "displacement": true,
-          "volume_spike": true,
-          "previous_day_high": 106.00,
-          "previous_day_low": 102.00
+          "volumeSpike": true,
+          "previousDayHigh": 106.00,
+          "previousDayLow": 102.00
         },
         "timestamp": "2026-01-14T11:00:00Z"
       }
@@ -80,17 +80,17 @@
         "symbol": "BTCUSDT",
         "timeframe": "15",
         "strategy": "Trend Continuation",
-        "event_type": "continuation",
+        "eventType": "continuation",
         "direction": "bullish",
         "session": "NY",
         "price": {
           "close": 93500.00,
-          "stop_loss": 93000.00
+          "stopLoss": 93000.00
         },
         "context": {
-          "htf_bias": "bullish",
+          "htfBias": "bullish",
           "displacement": false,
-          "volume_spike": true
+          "volumeSpike": true
         },
         "timestamp": "2026-01-14T15:30:00Z"
       }
@@ -102,7 +102,7 @@
         "symbol": "BTCUSDT",
         "timeframe": "5",
         "strategy": "Simple Reversal",
-        "event_type": "reversal",
+        "eventType": "reversal",
         "direction": "bullish",
         "session": "London",
         "price": {
