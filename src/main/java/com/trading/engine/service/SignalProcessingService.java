@@ -47,11 +47,9 @@ public class SignalProcessingService {
             log.info("Step 1: Building market data aggregation");
             final var context = contextBuilder.buildContext(webhook);
 
+            // Continue processing even if context is invalid - we'll capture the issue in the signal
             if (!contextBuilder.isContextValid(context)) {
-                final var signal = createInvalidSignal(signalId, webhook, "Invalid market context data");
-                log.info("Sending notification for invalid signal");
-                notificationService.sendSignalNotification(signal);
-                return signal;
+                log.warn("Invalid market context data - continuing with limited analysis");
             }
 
             // Step 2: Build intraday context (deterministic analysis)
@@ -60,19 +58,14 @@ public class SignalProcessingService {
             log.info("Intraday context: {} - Confidence: {}/100",
                     intradayContext.getOiPriceBehavior(), intradayContext.getConfidenceScore());
 
-            // Check confidence threshold
+            // Note low confidence but continue processing
             if (intradayContext.getConfidenceScore() < CONFIDENCE_THRESHOLD) {
-                log.info("Confidence too low ({}/100) - sending notification anyway", intradayContext.getConfidenceScore());
-                final var signal = createLowConfidenceSignal(signalId, webhook, context, intradayContext);
-                notificationService.sendSignalNotification(signal);
-                return signal;
+                log.warn("Confidence below threshold ({}/100) - continuing with analysis", intradayContext.getConfidenceScore());
             }
 
+            // Note quick validation failure but continue
             if (!ruleEngine.quickValidation(webhook.getSession())) {
-                log.info("Failed quick validation - sending notification anyway");
-                final var signal = createBlockedSignal(signalId, webhook, context, intradayContext, "Pre-validation failed");
-                notificationService.sendSignalNotification(signal);
-                return signal;
+                log.warn("Failed quick validation - continuing with full analysis");
             }
 
             // Step 3: AI Trade Analysis (based on strategy and event type)
@@ -95,6 +88,8 @@ public class SignalProcessingService {
                 log.info("Execution plan: {} - {} targets",
                         executionPlan.getExecutionModel(),
                         executionPlan.getTargets() != null ? executionPlan.getTargets().size() : 0);
+            } else {
+                log.info("Skipping execution plan - rules not passed or quality too low");
             }
 
             // Step 6: Execution advisory checklist
@@ -116,7 +111,7 @@ public class SignalProcessingService {
             log.info("Step 8: Creating journal entry");
             journalService.createEntry(signal);
 
-            // Step 9: Notification (send for ALL signals)
+            // Step 9: Notification (send once at the end with complete analysis)
             log.info("Step 9: Sending notification - Status: {}", signal.getStatus());
             notificationService.sendSignalNotification(signal);
 
