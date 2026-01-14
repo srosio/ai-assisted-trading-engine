@@ -51,7 +51,13 @@ public class NotificationService extends TelegramLongPollingBot {
             sb.append(" @ ").append(signal.getMarketContext().getCurrentPrice());
         }
         sb.append("</b>\n");
-        sb.append(escapeHtml(signal.getEvent()));
+
+        // Display strategy and event type
+        if (signal.getStrategy() != null) {
+            sb.append(escapeHtml(signal.getStrategy())).append(" - ").append(escapeHtml(signal.getEventType()));
+        } else if (signal.getEvent() != null) {
+            sb.append(escapeHtml(signal.getEvent()));
+        }
         if (signal.getMarketContext() != null) {
             sb.append(" | ").append(escapeHtml(signal.getMarketContext().getSession()));
         }

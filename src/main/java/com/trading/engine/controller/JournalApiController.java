@@ -210,10 +210,10 @@ public class JournalApiController {
 
         final var statsByStrategy = new HashMap<String, JournalStatistics>();
 
-        // Group by event type (strategy)
+        // Group by strategy (use new strategy field if available, otherwise extract from event)
         final var grouped = entries.stream()
                 .collect(java.util.stream.Collectors.groupingBy(
-                        entry -> extractStrategyFromEvent(entry.getEvent())
+                        entry -> entry.getStrategy() != null ? entry.getStrategy() : extractStrategyFromEvent(entry.getEvent())
                 ));
 
         grouped.forEach((strategy, strategyEntries) -> {

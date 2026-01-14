@@ -198,12 +198,20 @@ public class StaticAnalysisService {
     }
 
     private String generateInvalidation(final TradingViewWebhook webhook, final MarketContext context) {
-        final var direction = webhook.getEvent().toLowerCase().contains("long") ? "LONG" : "SHORT";
+        // Map direction from bullish/bearish to LONG/SHORT
+        final var direction = webhook.getDirection() != null &&
+                webhook.getDirection().equalsIgnoreCase("bullish") ? "LONG" : "SHORT";
 
-        if (webhook.getSweptHigh() != null && direction.equals("SHORT")) {
-            return String.format("Price moving back above swept high: %s", webhook.getSweptHigh());
-        } else if (webhook.getSweptLow() != null && direction.equals("LONG")) {
-            return String.format("Price moving back below swept low: %s", webhook.getSweptLow());
+        if (webhook.getSweptLevel() != null) {
+            if (direction.equals("SHORT")) {
+                return String.format("Price moving back above swept level: %s", webhook.getSweptLevel());
+            } else {
+                return String.format("Price moving back below swept level: %s", webhook.getSweptLevel());
+            }
+        }
+
+        if (webhook.getSuggestedStopLoss() != null) {
+            return String.format("Stop loss hit at: %s", webhook.getSuggestedStopLoss());
         }
 
         return "Stop loss hit or setup structure breaks";

@@ -17,12 +17,13 @@ public class ContextBuilderService {
     private final MarketDataService marketDataService;
 
     public MarketContext buildContext(final TradingViewWebhook webhook) {
-        log.info("Building market context for {} - Event: {}", webhook.getSymbol(), webhook.getEvent());
+        log.info("Building market context for {} - Strategy: {}, Event: {}, Direction: {}",
+                webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
 
         final var symbol = webhook.getSymbol();
 
         // Try Binance API, fallback to webhook data
-        BigDecimal currentPrice = webhook.getPrice();
+        BigDecimal currentPrice = webhook.getCurrentPrice();
         Double oiChange = BigDecimal.ZERO.doubleValue();
         BigDecimal fundingRate = BigDecimal.ZERO;
         String volatility = "normal";
@@ -76,13 +77,13 @@ public class ContextBuilderService {
                 .session(webhook.getSession())
                 .oiChangePercent(oiChange)
                 .fundingRate(fundingRate.doubleValue())
-                .liquidityEvent(webhook.getEvent())
+                .liquidityEvent(webhook.getStrategy() + " - " + webhook.getEventType())
                 .volatility(volatility)
                 .currentPrice(currentPrice)
                 .previousDayHigh(pdHigh)
                 .previousDayLow(pdLow)
                 .volumeSpike(webhook.getVolumeSpike() != null ? webhook.getVolumeSpike() : false)
-                .displacementDetected(webhook.getDisplacementDetected() != null ? webhook.getDisplacementDetected() : false)
+                .displacementDetected(webhook.getDisplacement() != null ? webhook.getDisplacement() : false)
                 .atrValue(atr)
                 .nearestResistance(pdHigh)
                 .nearestSupport(pdLow)

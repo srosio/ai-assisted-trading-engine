@@ -34,6 +34,18 @@ public class JournalEntry {
     @Column(nullable = false)
     private String event;
 
+    @Column(name = "strategy")
+    private String strategy;
+
+    @Column(name = "event_type")
+    private String eventType;
+
+    @Column(name = "swept_level", precision = 20, scale = 8)
+    private BigDecimal sweptLevel;
+
+    @Column(name = "suggested_stop_loss", precision = 20, scale = 8)
+    private BigDecimal suggestedStopLoss;
+
     @Column(name = "webhook_payload", columnDefinition = "TEXT")
     private String webhookPayload;
 

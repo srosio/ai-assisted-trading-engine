@@ -21,6 +21,10 @@ public class JournalEntryResponse {
     private String symbol;
     private String direction;
     private String event;
+    private String strategy;
+    private String eventType;
+    private BigDecimal sweptLevel;
+    private BigDecimal suggestedStopLoss;
 
     @JsonRawValue
     private String marketContext;
@@ -61,6 +65,10 @@ public class JournalEntryResponse {
         response.setSymbol(entry.getSymbol());
         response.setDirection(entry.getDirection());
         response.setEvent(entry.getEvent());
+        response.setStrategy(entry.getStrategy());
+        response.setEventType(entry.getEventType());
+        response.setSweptLevel(entry.getSweptLevel());
+        response.setSuggestedStopLoss(entry.getSuggestedStopLoss());
 
         // Parse JSON strings - return as-is for @JsonRawValue to handle
         response.setMarketContext(entry.getMarketContext());

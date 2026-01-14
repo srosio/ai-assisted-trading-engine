@@ -25,8 +25,8 @@ public class WebhookController {
     public ResponseEntity<?> receiveTradingViewWebhook(
             @Valid @RequestBody final TradingViewWebhook webhook) {
 
-        log.info("Received TradingView webhook - Symbol: {}, Event: {}, Session: {}",
-                webhook.getSymbol(), webhook.getEvent(), webhook.getSession());
+        log.info("Received TradingView webhook - Symbol: {}, Strategy: {}, Event: {}, Direction: {}, Session: {}",
+                webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection(), webhook.getSession());
 
         // Step 1: Ingress Layer - Validate payload
         if (!ingressService.isValidPayload(webhook)) {
@@ -61,11 +61,12 @@ public class WebhookController {
                 "status", "ACCEPTED",
                 "message", "Webhook received and processing started",
                 "symbol", webhook.getSymbol(),
-                "event", webhook.getEvent()
+                "strategy", webhook.getStrategy(),
+                "event_type", webhook.getEventType()
         );
 
-        log.info("Webhook accepted for async processing - Symbol: {}, Event: {}",
-                webhook.getSymbol(), webhook.getEvent());
+        log.info("Webhook accepted for async processing - Symbol: {}, Strategy: {}, Event: {}",
+                webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType());
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
@@ -83,8 +84,8 @@ public class WebhookController {
     public ResponseEntity<?> testSignal(
             @RequestBody final TradingViewWebhook webhook) {
 
-        log.info("Test signal received - Symbol: {}, Event: {}",
-                webhook.getSymbol(), webhook.getEvent());
+        log.info("Test signal received - Symbol: {}, Strategy: {}, Event: {}",
+                webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType());
 
         final var signal = signalProcessor.processWebhook(webhook);
 

@@ -36,6 +36,8 @@ public class JournalService {
                     .symbol(signal.getSymbol())
                     .direction(signal.getDirection())
                     .event(signal.getEvent())
+                    .strategy(signal.getStrategy())
+                    .eventType(signal.getEventType())
                     .webhookPayload(objectMapper.writeValueAsString(signal))
                     .marketContext(objectMapper.writeValueAsString(signal.getMarketContext()))
                     .aiAssessment(objectMapper.writeValueAsString(signal.getAiAssessment()))
@@ -45,6 +47,13 @@ public class JournalService {
                     .session(signal.getMarketContext().getSession())
                     .status(signal.getStatus())
                     .build();
+
+            // Set optional fields from execution plan if available
+            if (signal.getExecutionPlan() != null) {
+                if (signal.getExecutionPlan().getSuggestedStopPrice() != null) {
+                    entry.setSuggestedStopLoss(signal.getExecutionPlan().getSuggestedStopPrice());
+                }
+            }
 
             // Risk calculations (entry, stop, size, etc.) are done manually by human trader
             // These fields remain null and can be filled in later via updateTradeOutcome

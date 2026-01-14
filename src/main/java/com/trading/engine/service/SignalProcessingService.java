@@ -28,8 +28,8 @@ public class SignalProcessingService {
     @Async
     public void processWebhookAsync(final TradingViewWebhook webhook) {
         try {
-            log.info("Processing webhook asynchronously for {} - Event: {}",
-                    webhook.getSymbol(), webhook.getEvent());
+            log.info("Processing webhook asynchronously for {} - Strategy: {}, Event: {}, Direction: {}",
+                    webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
             processWebhook(webhook);
         } catch (final Exception e) {
             log.error("Error in async webhook processing: {}", e.getMessage(), e);
@@ -39,8 +39,8 @@ public class SignalProcessingService {
 
     public TradeSignal processWebhook(final TradingViewWebhook webhook) {
         final var signalId = UUID.randomUUID().toString();
-        log.info("Processing webhook {} for {} - Event: {}",
-                signalId, webhook.getSymbol(), webhook.getEvent());
+        log.info("Processing webhook {} for {} - Strategy: {}, Event: {}, Direction: {}",
+                signalId, webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
 
         try {
             // Step 1: Build market context
@@ -75,8 +75,8 @@ public class SignalProcessingService {
                 return signal;
             }
 
-            // Step 3: AI Trade Analysis (based on Pine Script events)
-            log.info("Step 3: Requesting AI setup assessment for Pine Script event: {}", webhook.getEvent());
+            // Step 3: AI Trade Analysis (based on strategy and event type)
+            log.info("Step 3: Requesting AI setup assessment for {} - {}", webhook.getStrategy(), webhook.getEventType());
             final var assessment = aiAnalysis.analyzeContext(context, webhook, intradayContext);
             log.info("AI assessment: Quality {}, Alignment {}/100",
                     assessment.getSetupQuality(), assessment.getAlignmentScore());
@@ -85,9 +85,9 @@ public class SignalProcessingService {
             log.info("Step 4: Validating against trading rules");
             final var ruleResult = ruleEngine.validateSetup(context, assessment);
 
-            // Step 5: Generate execution plan (if rules pass) based on Pine Script event
-            log.info("Step 5: Generating execution plan based on Pine Script event");
-            final var direction = determineDirection(webhook.getEvent());
+            // Step 5: Generate execution plan (if rules pass) based on strategy and event type
+            log.info("Step 5: Generating execution plan based on strategy and event type");
+            final var direction = mapDirectionToTradeDirection(webhook.getDirection());
             ExecutionPlan executionPlan = null;
 
             if (ruleResult.isPassed() && !assessment.getSetupQuality().equals("C")) {
@@ -163,7 +163,9 @@ public class SignalProcessingService {
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
                 .direction(direction)
-                .event(webhook.getEvent())
+                .strategy(webhook.getStrategy())
+                .eventType(webhook.getEventType())
+                .event(webhook.getStrategy() + " - " + webhook.getEventType()) // legacy field
                 .marketContext(context)
                 .intradayContext(intradayContext)
                 .aiAssessment(assessment)
@@ -182,8 +184,10 @@ public class SignalProcessingService {
         return TradeSignal.builder()
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
-                .direction(determineDirection(webhook.getEvent()))
-                .event(webhook.getEvent())
+                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
+                .strategy(webhook.getStrategy())
+                .eventType(webhook.getEventType())
+                .event(webhook.getStrategy() + " - " + webhook.getEventType())
                 .marketContext(context)
                 .intradayContext(intradayContext)
                 .timestamp(LocalDateTime.now())
@@ -197,8 +201,10 @@ public class SignalProcessingService {
         return TradeSignal.builder()
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
-                .direction(determineDirection(webhook.getEvent()))
-                .event(webhook.getEvent())
+                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
+                .strategy(webhook.getStrategy())
+                .eventType(webhook.getEventType())
+                .event(webhook.getStrategy() + " - " + webhook.getEventType())
                 .timestamp(LocalDateTime.now())
                 .status("INVALID")
                 .action("Data quality insufficient - " + reason)
@@ -211,8 +217,10 @@ public class SignalProcessingService {
         return TradeSignal.builder()
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
-                .direction(determineDirection(webhook.getEvent()))
-                .event(webhook.getEvent())
+                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
+                .strategy(webhook.getStrategy())
+                .eventType(webhook.getEventType())
+                .event(webhook.getStrategy() + " - " + webhook.getEventType())
                 .marketContext(context)
                 .intradayContext(intradayContext)
                 .timestamp(LocalDateTime.now())
@@ -225,19 +233,27 @@ public class SignalProcessingService {
         return TradeSignal.builder()
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
-                .direction(determineDirection(webhook.getEvent()))
-                .event(webhook.getEvent())
+                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
+                .strategy(webhook.getStrategy())
+                .eventType(webhook.getEventType())
+                .event(webhook.getStrategy() + " - " + webhook.getEventType())
                 .timestamp(LocalDateTime.now())
                 .status("INVALID")
                 .action("System error: " + error)
                 .build();
     }
 
-    private String determineDirection(final String event) {
-        final var eventLower = event.toLowerCase();
-        if (eventLower.contains("long") || eventLower.contains("bullish")) {
+    /**
+     * Maps webhook direction (bullish/bearish) to trade direction (LONG/SHORT)
+     */
+    private String mapDirectionToTradeDirection(final String direction) {
+        if (direction == null) {
+            return "UNKNOWN";
+        }
+        final var directionLower = direction.toLowerCase();
+        if (directionLower.equals("bullish")) {
             return "LONG";
-        } else if (eventLower.contains("short") || eventLower.contains("bearish")) {
+        } else if (directionLower.equals("bearish")) {
             return "SHORT";
         }
         return "UNKNOWN";
@@ -256,7 +272,9 @@ public class SignalProcessingService {
         final var sb = new StringBuilder();
         sb.append("🚨 <b>WEBHOOK PROCESSING ERROR</b>\n\n");
         sb.append("<b>Symbol:</b> ").append(webhook.getSymbol()).append("\n");
-        sb.append("<b>Event:</b> ").append(webhook.getEvent()).append("\n");
+        sb.append("<b>Strategy:</b> ").append(webhook.getStrategy()).append("\n");
+        sb.append("<b>Event Type:</b> ").append(webhook.getEventType()).append("\n");
+        sb.append("<b>Direction:</b> ").append(webhook.getDirection()).append("\n");
         sb.append("<b>Session:</b> ").append(webhook.getSession()).append("\n");
         sb.append("<b>Timeframe:</b> ").append(webhook.getTimeframe()).append("\n\n");
         sb.append("<b>Error:</b> ").append(error.getClass().getSimpleName()).append("\n");

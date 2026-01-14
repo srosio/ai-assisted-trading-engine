@@ -20,7 +20,11 @@ public class TradeSignal {
 
     private String direction; // LONG or SHORT
 
-    private String event; // liquidity_sweep_long, session_break, etc.
+    private String strategy; // e.g., "Liquidity Sweeps", "Candle 2 Closure"
+
+    private String eventType; // reversal, continuation, breakout, sweep
+
+    private String event; // legacy field for backward compatibility in logs
 
     private MarketContext marketContext;
 

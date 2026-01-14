@@ -53,11 +53,13 @@ public class IngressService {
      * Generate unique key for event deduplication
      */
     private String generateEventKey(final TradingViewWebhook webhook) {
-        return String.format("%s:%s:%s:%.2f",
+        return String.format("%s:%s:%s:%s:%s:%.2f",
                 webhook.getSymbol(),
-                webhook.getEvent(),
+                webhook.getStrategy(),
+                webhook.getEventType(),
+                webhook.getDirection(),
                 webhook.getSession(),
-                webhook.getPrice() != null ? webhook.getPrice().doubleValue() : 0.0);
+                webhook.getCurrentPrice() != null ? webhook.getCurrentPrice().doubleValue() : 0.0);
     }
 
     /**
@@ -97,13 +99,23 @@ public class IngressService {
             return false;
         }
 
-        if (webhook.getEvent() == null || webhook.getEvent().isBlank()) {
-            log.error("Invalid payload: missing event");
+        if (webhook.getStrategy() == null || webhook.getStrategy().isBlank()) {
+            log.error("Invalid payload: missing strategy");
             return false;
         }
 
-        if (webhook.getPrice() == null) {
-            log.error("Invalid payload: missing price");
+        if (webhook.getEventType() == null || webhook.getEventType().isBlank()) {
+            log.error("Invalid payload: missing event_type");
+            return false;
+        }
+
+        if (webhook.getDirection() == null || webhook.getDirection().isBlank()) {
+            log.error("Invalid payload: missing direction");
+            return false;
+        }
+
+        if (webhook.getPrice() == null || webhook.getCurrentPrice() == null) {
+            log.error("Invalid payload: missing price object or close price");
             return false;
         }
 
