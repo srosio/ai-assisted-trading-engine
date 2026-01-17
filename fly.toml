@@ -1,0 +1,41 @@
+# Fly.io deployment configuration
+# https://fly.io/docs/reference/configuration/
+
+app = "sros-trading-engine"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Use simple in-memory cache (no Redis on free tier)
+  SPRING_CACHE_TYPE = "simple"
+  # Reduce Hibernate logging in production
+  LOGGING_LEVEL_ORG_HIBERNATE_SQL = "INFO"
+  # JVM optimized for 512MB RAM
+  JAVA_OPTS = "-Xms128m -Xmx384m -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=32m -XX:+UseSerialGC -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "10s"
+  grace_period = "180s"
+  method = "GET"
+  path = "/api/webhook/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
