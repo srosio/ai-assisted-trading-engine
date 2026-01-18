@@ -1,9 +1,9 @@
 // This work is licensed under a Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
 // © LuxAlgo
-// Modified by Gemini: Add RSI filter and HMA Turbo
+// Modified: Add RSI (Strict Mode) + HMA + JSON Alerts
 
 //@version=6
-indicator('Candle 2 Closure + RSI', overlay = true, max_boxes_count = 500, max_labels_count = 500, max_lines_count = 500)
+indicator('Candle 2 Closure + RSI [Strict]', overlay = true, max_boxes_count = 500, max_labels_count = 500, max_lines_count = 500)
 
 //---------------------------------------------------------------------------------------------------------------------}
 // INPUTS
@@ -25,8 +25,9 @@ wickPercentInput    = input.int(40, 'Wick Threshold %', tooltip = 'Max wick size
 // --- FILTERS ---
 useRsiFilter        = input.bool(true, "Use RSI Filter?", group = FILTER_GROUP)
 rsiLen              = input.int(14, "RSI Length", group = FILTER_GROUP)
-rsiBuyLevel         = input.int(65, "Max RSI for Buy (<)", group = FILTER_GROUP)
-rsiSellLevel        = input.int(35, "Min RSI for Sell (>)", group = FILTER_GROUP)
+// CHANGED: Defaults set to 30/70 for strict filtering
+rsiBuyLevel         = input.int(30, "Max RSI for Buy (<)", group = FILTER_GROUP, tooltip="Only Buy if RSI is below this (Oversold)")
+rsiSellLevel        = input.int(70, "Min RSI for Sell (>)", group = FILTER_GROUP, tooltip="Only Sell if RSI is above this (Overbought)")
 useHmaFilter        = input.bool(true, "Use HMA Trend (HTF Bias)?", group = FILTER_GROUP)
 hmaLength           = input.int(55, "HMA Length", group = FILTER_GROUP)
 
@@ -53,6 +54,7 @@ type trigger
     float price = na
     float sl = na
 
+// Reset triggers every bar
 trigger t2 = trigger.new()
 trigger t3 = trigger.new()
 
@@ -81,11 +83,11 @@ get_session() =>
 get_bias() =>
     close > hmaValue ? "bullish" : "bearish"
 
-// --- 4. Universal JSON Generator (FIXED TIME FORMAT) ---
+// --- 4. Universal JSON Generator ---
 get_json(string _direction, string _eventType, float _price, float _sl, float _sweptLevel, string _htfBias) =>
     string _sess = get_session()
 
-    // Constructing the JSON string
+    // Fixed: Added 'Z' to timestamp to indicate UTC properly for parsers
     string json =
       '{' +
       '"symbol": "' + syminfo.ticker + '", ' +
@@ -103,7 +105,7 @@ get_json(string _direction, string _eventType, float _price, float _sl, float _s
           '"htfBias": "' + _htfBias + '", ' +
           '"displacement": true' +
       '}, ' +
-      '"timestamp": "' + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss", "UTC") + '"' +
+      '"timestamp": "' + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC") + '"' +
       '}'
     json
 
@@ -116,73 +118,74 @@ hmaSellCondition = not useHmaFilter or (close < hmaValue)
 plot(useHmaFilter ? hmaValue : na, "HTF Bias (HMA)", color=color.rgb(156, 39, 176), linewidth=2)
 
 //---------------------------------------------------------------------------------------------------------------------}
-// LOGIC & PLOTTING
+// LOGIC & PLOTTING (Global Scope)
 //---------------------------------------------------------------------------------------------------------------------{
-drawLevels() =>
-    // LuxAlgo Reversal Logic
-    bool bullishReversalCloseRaw   = (reversalFilterInput ? low == ta.lowest(filterLengthInput) : true) and close[1] < open[1] and low < low[1] and close > low[1]
-    bool bearishReversalCloseRaw   = (reversalFilterInput ? high == ta.highest(filterLengthInput) : true) and close[1] > open[1] and high > high[1] and close < high[1]
 
-    // Apply Filters
-    bool bullishReversalClose = bullishReversalCloseRaw and rsiBuyCondition and hmaBuyCondition
-    bool bearishReversalClose = bearishReversalCloseRaw and rsiSellCondition and hmaSellCondition
+// LuxAlgo Reversal Logic
+bool bullishReversalCloseRaw   = (reversalFilterInput ? low == ta.lowest(filterLengthInput) : true) and close[1] < open[1] and low < low[1] and close > low[1]
+bool bearishReversalCloseRaw   = (reversalFilterInput ? high == ta.highest(filterLengthInput) : true) and close[1] > open[1] and high > high[1] and close < high[1]
 
-    bool candle2Reversal        = bullishReversalClose or bearishReversalClose
-    float wickThreshold         = math.round_to_mintick(0.01*wickPercentInput*(high - low))
-    bool bullishBigWick         = (math.min(close,open) - low) > wickThreshold
-    bool bearishBigWick         = (high - math.max(close,open)) > wickThreshold
-    bool bigWick                = (bullishReversalClose and bullishBigWick) or (bearishBigWick and bearishReversalClose)
-    bool bearishExpansion       = bearishReversalClose[1] and high < high[1] and close < low[1]
-    bool bullishExpansion       = bullishReversalClose[1] and low > low[1] and close > high[1]
-    bool candle3Expansion       = (bearishExpansion or bullishExpansion)
+// Apply Filters
+bool bullishReversalClose = bullishReversalCloseRaw and rsiBuyCondition and hmaBuyCondition
+bool bearishReversalClose = bearishReversalCloseRaw and rsiSellCondition and hmaSellCondition
 
-    // --- CANDLE 2 (Main Reversal) ---
-    if candle2Reversal and candle2Input
-        // Visuals
-        label.new(chart.point.new(time,na,bullishReversalClose ? low : high),'2',xloc.bar_time,bullishReversalClose ? yloc.belowbar : yloc.abovebar, color(na), bullishReversalClose ? label.style_label_up : label.style_label_down, bullishReversalClose ? bullishColorInput : bearishColorInput,size.small)
+bool candle2Reversal        = bullishReversalClose or bearishReversalClose
+float wickThreshold         = math.round_to_mintick(0.01*wickPercentInput*(high - low))
+bool bullishBigWick         = (math.min(close,open) - low) > wickThreshold
+bool bearishBigWick         = (high - math.max(close,open)) > wickThreshold
+bool bigWick                = (bullishReversalClose and bullishBigWick) or (bearishBigWick and bearishReversalClose)
 
-        // Populate Data for JSON
-        t2.active := true
-        t2.direction := bullishReversalClose ? "bullish" : "bearish"
-        t2.event_type := "reversal"
-        t2.price := close
-        t2.swept_level := bullishReversalClose ? low[1] : high[1]
-        t2.sl := bullishReversalClose ? low : high // Suggest SL at recent candle low/high
+// History reference is now safe
+bool bearishExpansion       = bearishReversalClose[1] and high < high[1] and close < low[1]
+bool bullishExpansion       = bullishReversalClose[1] and low > low[1] and close > high[1]
+bool candle3Expansion       = (bearishExpansion or bullishExpansion)
 
-        if levelsInput
-            line.new(chart.point.new(time[1],na,bullishReversalClose ? low[1] : high[1]),chart.point.new(time + barMilliseconds,na,bullishReversalClose ? low[1] : high[1]),xloc.bar_time,color = levelsAutoInput ? chart.fg_color : levelsColorInput)
-        if candle2ZoneInput
-            float top           = 0.0
-            float bottom        = 0.0
-            float bodyTop       = math.max(close,open)
-            float bodyBottom    = math.min(close,open)
-            if bigWick
-                top     := bullishReversalClose ? bodyBottom : high - math.round_to_mintick(0.5*(high - bodyTop))
-                bottom  := bullishReversalClose ? bodyBottom - math.round_to_mintick(0.5*(bodyBottom - low)) : bodyTop
-            else
-                top     := bullishReversalClose ? bodyTop : hl2
-                bottom  := bullishReversalClose ? hl2 : bodyBottom
-            box.new(chart.point.new(time,na,top),chart.point.new(time + barMilliseconds,na,bottom),border_color = color(na),xloc = xloc.bar_time, bgcolor = bullishReversalClose ? color.new(bullishColorInput,transparencyInput) : color.new(bearishColorInput,transparencyInput))
+// --- CANDLE 2 (Main Reversal) ---
+if candle2Reversal and candle2Input
+    // Visuals
+    label.new(chart.point.new(time,na,bullishReversalClose ? low : high),'2',xloc.bar_time,bullishReversalClose ? yloc.belowbar : yloc.abovebar, color(na), bullishReversalClose ? label.style_label_up : label.style_label_down, bullishReversalClose ? bullishColorInput : bearishColorInput,size.small)
 
-    // --- CANDLE 3 (Expansion/Continuation) ---
-    if candle3Expansion and candle3Input
-        label.new(chart.point.new(time,na,bullishExpansion ? low : high),'3',xloc.bar_time,bullishExpansion ? yloc.belowbar : yloc.abovebar, color(na), bullishExpansion ? label.style_label_up : label.style_label_down, bullishExpansion ? bullishColorInput : bearishColorInput,size.small)
-        t3.active := true
-        t3.direction := bullishExpansion ? "bullish" : "bearish"
-        t3.event_type := "expansion"
-        t3.price := close
-        t3.swept_level := na // Expansions don't sweep, they run
-        t3.sl := bullishExpansion ? low : high
+    // Populate Data for JSON
+    t2.active := true
+    t2.direction := bullishReversalClose ? "bullish" : "bearish"
+    t2.event_type := "reversal"
+    t2.price := close
+    t2.swept_level := bullishReversalClose ? low[1] : high[1]
+    t2.sl := bullishReversalClose ? low : high
 
-        if candle3ZoneInput
-            float top       = bullishExpansion ? close : hl2
-            float bottom    = bullishExpansion ? hl2 : close
-            box.new(chart.point.new(time,na,top),chart.point.new(time + barMilliseconds,na,bottom),border_color = color(na),xloc = xloc.bar_time, bgcolor = bullishExpansion ? color.new(bullishColorInput,transparencyInput) : color.new(bearishColorInput,transparencyInput))
+    if levelsInput
+        line.new(chart.point.new(time[1],na,bullishReversalClose ? low[1] : high[1]),chart.point.new(time + barMilliseconds,na,bullishReversalClose ? low[1] : high[1]),xloc.bar_time,color = levelsAutoInput ? chart.fg_color : levelsColorInput)
+    if candle2ZoneInput
+        float top           = 0.0
+        float bottom        = 0.0
+        float bodyTop       = math.max(close,open)
+        float bodyBottom    = math.min(close,open)
+        if bigWick
+            top     := bullishReversalClose ? bodyBottom : high - math.round_to_mintick(0.5*(high - bodyTop))
+            bottom  := bullishReversalClose ? bodyBottom - math.round_to_mintick(0.5*(bodyBottom - low)) : bodyTop
+        else
+            top     := bullishReversalClose ? bodyTop : hl2
+            bottom  := bullishReversalClose ? hl2 : bodyBottom
+        box.new(chart.point.new(time,na,top),chart.point.new(time + barMilliseconds,na,bottom),border_color = color(na),xloc = xloc.bar_time, bgcolor = bullishReversalClose ? color.new(bullishColorInput,transparencyInput) : color.new(bearishColorInput,transparencyInput))
+
+// --- CANDLE 3 (Expansion/Continuation) ---
+if candle3Expansion and candle3Input
+    label.new(chart.point.new(time,na,bullishExpansion ? low : high),'3',xloc.bar_time,bullishExpansion ? yloc.belowbar : yloc.abovebar, color(na), bullishExpansion ? label.style_label_up : label.style_label_down, bullishExpansion ? bullishColorInput : bearishColorInput,size.small)
+    t3.active := true
+    t3.direction := bullishExpansion ? "bullish" : "bearish"
+    t3.event_type := "expansion"
+    t3.price := close
+    t3.swept_level := na
+    t3.sl := bullishExpansion ? low : high
+
+    if candle3ZoneInput
+        float top       = bullishExpansion ? close : hl2
+        float bottom    = bullishExpansion ? hl2 : close
+        box.new(chart.point.new(time,na,top),chart.point.new(time + barMilliseconds,na,bottom),border_color = color(na),xloc = xloc.bar_time, bgcolor = bullishExpansion ? color.new(bullishColorInput,transparencyInput) : color.new(bearishColorInput,transparencyInput))
 
 //---------------------------------------------------------------------------------------------------------------------}
 // EXECUTION & ALERTS
 //---------------------------------------------------------------------------------------------------------------------{
-drawLevels()
 
 // Get Current HTF Bias from HMA
 currentBias = get_bias()
