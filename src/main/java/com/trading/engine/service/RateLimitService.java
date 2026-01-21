@@ -42,10 +42,6 @@ public class RateLimitService {
         endpointWeights.put("/fapi/v1/depth", 5);
     }
 
-    /**
-     * Check if we should allow a request based on current rate limit status.
-     * Returns true if request should proceed, false if it should be delayed.
-     */
     public boolean tryAcquire(String endpoint) {
         resetIfNeeded();
 
@@ -73,10 +69,6 @@ public class RateLimitService {
         return true;
     }
 
-    /**
-     * Wait if necessary before allowing a request to proceed.
-     * This is a blocking call that will sleep if rate limits are being approached.
-     */
     public void acquireWithWait(String endpoint) throws InterruptedException {
         while (!tryAcquire(endpoint)) {
             // Wait before retrying
@@ -96,9 +88,6 @@ public class RateLimitService {
         }
     }
 
-    /**
-     * Update the current weight usage based on the X-MBX-USED-WEIGHT header from API response.
-     */
     public void updateWeight(String weightHeader) {
         try {
             if (weightHeader != null && !weightHeader.isEmpty()) {
@@ -114,10 +103,6 @@ public class RateLimitService {
         }
     }
 
-    /**
-     * Record that we hit a rate limit (418 or 429 response).
-     * Implements exponential back-off strategy.
-     */
     public void recordRateLimitHit(Long retryAfterSeconds) {
         int hits = consecutiveRateLimitHits.incrementAndGet();
 
@@ -139,16 +124,10 @@ public class RateLimitService {
         currentWeight.set(MAX_WEIGHT_PER_MINUTE);
     }
 
-    /**
-     * Record a successful request, resetting consecutive rate limit hits.
-     */
     public void recordSuccess() {
         consecutiveRateLimitHits.set(0);
     }
 
-    /**
-     * Reset the rate limit counters if we've entered a new minute window.
-     */
     private void resetIfNeeded() {
         long now = System.currentTimeMillis();
         long lastReset = lastResetTime.get();
@@ -162,9 +141,6 @@ public class RateLimitService {
         }
     }
 
-    /**
-     * Extract the endpoint key from a full URL for weight tracking.
-     */
     private String getEndpointKey(String endpoint) {
         if (endpoint == null) return "";
 
@@ -176,16 +152,10 @@ public class RateLimitService {
         return endpoint;
     }
 
-    /**
-     * Get current weight usage for monitoring/debugging.
-     */
     public int getCurrentWeight() {
         return currentWeight.get();
     }
 
-    /**
-     * Get the maximum weight per minute.
-     */
     public int getMaxWeight() {
         return MAX_WEIGHT_PER_MINUTE;
     }

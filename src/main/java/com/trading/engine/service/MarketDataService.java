@@ -186,9 +186,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get funding rate delta (current vs 8h ago)
-     */
     @Cacheable(value = "fundingDelta", key = "#symbol")
     public Double getFundingRateDelta(final String symbol) {
         try {
@@ -218,9 +215,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get taker buy/sell ratio (from recent trades)
-     */
     @Cacheable(value = "takerRatio", key = "#symbol")
     public Double getTakerBuySellRatio(final String symbol) {
         try {
@@ -252,9 +246,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get spot vs perp volume ratio
-     */
     @Cacheable(value = "spotPerpVolume", key = "#symbol")
     public Double getSpotVsPerpVolumeRatio(final String symbol) {
         try {
@@ -282,9 +273,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get liquidation data (total liquidations in last hour)
-     */
     @Cacheable(value = "liquidations", key = "#symbol")
     public Double getRecentLiquidations(final String symbol) {
         try {
@@ -319,9 +307,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get order book imbalance (bid vs ask volume at top levels)
-     */
     @Cacheable(value = "orderBookImbalance", key = "#symbol")
     public Double getOrderBookImbalance(final String symbol) {
         try {
@@ -361,9 +346,6 @@ public class MarketDataService {
         }
     }
 
-    /**
-     * Get 24h volume data
-     */
     @Cacheable(value = "volume24h", key = "#symbol")
     public Double get24hVolume(final String symbol) {
         try {

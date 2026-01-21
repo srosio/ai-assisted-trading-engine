@@ -1,5 +1,6 @@
 package com.trading.engine.service;
 
+import com.trading.engine.config.ClaudeConfig;
 import com.trading.engine.domain.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +22,7 @@ public class SignalProcessingService {
     private final ExecutionAdvisoryService executionAdvisory;
     private final JournalService journalService;
     private final NotificationService notificationService;
-
-    // Confidence threshold to proceed with execution planning
-    private static final int CONFIDENCE_THRESHOLD = 60;
+    private final ClaudeConfig claudeConfig;
 
     @Async
     public void processWebhookAsync(final TradingViewWebhook webhook) {
@@ -58,50 +57,45 @@ public class SignalProcessingService {
             log.info("Intraday context: {} - Confidence: {}/100",
                     intradayContext.getOiPriceBehavior(), intradayContext.getConfidenceScore());
 
-            // Note low confidence but continue processing
-            if (intradayContext.getConfidenceScore() < CONFIDENCE_THRESHOLD) {
-                log.warn("Confidence below threshold ({}/100) - continuing with analysis", intradayContext.getConfidenceScore());
-            }
-
-            // Note quick validation failure but continue
-            if (!ruleEngine.quickValidation(webhook.getSession())) {
-                log.warn("Failed quick validation - continuing with full analysis");
-            }
-
-            // Step 3: AI Trade Analysis (based on strategy and event type)
-            log.info("Step 3: Requesting AI setup assessment for {} - {}", webhook.getStrategy(), webhook.getEventType());
-            final var assessment = aiAnalysis.analyzeContext(context, webhook, intradayContext);
-            log.info("AI assessment: Quality {}, Alignment {}/100",
-                    assessment.getSetupQuality(), assessment.getAlignmentScore());
-
-            // Step 4: Rule validation
-            log.info("Step 4: Validating against trading rules");
-            final var ruleResult = ruleEngine.validateSetup(context, assessment);
-
-            // Step 5: Generate execution plan (if rules pass) based on strategy and event type
-            log.info("Step 5: Generating execution plan based on strategy and event type");
             final var direction = mapDirectionToTradeDirection(webhook.getDirection());
+            AiAssessment assessment;
             ExecutionPlan executionPlan = null;
 
-            if (ruleResult.isPassed() && !assessment.getSetupQuality().equals("C")) {
-                executionPlan = aiAnalysis.generateExecutionPlan(context, intradayContext, webhook, direction);
-                log.info("Execution plan: {} - {} targets",
-                        executionPlan.getExecutionModel(),
-                        executionPlan.getTargets() != null ? executionPlan.getTargets().size() : 0);
+            if (claudeConfig.isEnableSmartGating() &&
+                intradayContext.getConfidenceScore() < claudeConfig.getSmartGatingThreshold()) {
+
+                log.info("SMART GATING: Skipping AI analysis - confidence {}/100 below threshold {}/100 (30-40% cost savings)",
+                        intradayContext.getConfidenceScore(), claudeConfig.getSmartGatingThreshold());
+
+                // Use static analysis for low-confidence signals
+                assessment = createLowConfidenceAssessment(intradayContext);
             } else {
-                log.info("Skipping execution plan - rules not passed or quality too low");
+                log.info("Step 3: Requesting optimized combined AI analysis (1 API call vs 2 legacy calls - 50% savings)");
+                final var combinedAnalysis = aiAnalysis.analyzeCombined(context, webhook, intradayContext, direction);
+
+                // Extract assessment and execution plan from combined result
+                assessment = combinedAnalysis.toAiAssessment();
+                executionPlan = combinedAnalysis.toExecutionPlan();
+
+                log.info("AI analysis complete - Quality: {}, Model: {}",
+                        assessment.getSetupQuality(),
+                        executionPlan != null ? executionPlan.getExecutionModel() : "none");
             }
 
-            // Step 6: Execution advisory checklist
-            log.info("Step 6: Running execution advisory checks");
+            // Step 3: Rule validation
+            log.info("Step 3: Validating against trading rules");
+            final var ruleResult = ruleEngine.validateSetup(context, assessment);
+
+            // Step 4: Execution advisory checklist
+            log.info("Step 4: Running execution advisory checks");
             final var checklist = executionAdvisory.generateChecklist(
                     webhook.getSymbol(), context, intradayContext
             );
             log.info("Execution checklist: {} - Ready: {}",
                     checklist.getChecklistSummary(), checklist.getReadyForExecution());
 
-            // Step 7: Create trade signal
-            log.info("Step 7: Creating trade signal");
+            // Step 5: Create trade signal
+            log.info("Step 5: Creating trade signal");
             final var signal = createTradeSignal(
                     signalId, webhook, context, intradayContext, assessment,
                     executionPlan, ruleResult, checklist, direction
@@ -173,54 +167,20 @@ public class SignalProcessingService {
                 .build();
     }
 
-    private TradeSignal createLowConfidenceSignal(final String signalId, final TradingViewWebhook webhook,
-                                                    final MarketContext context,
-                                                    final IntradayContext intradayContext) {
-        return TradeSignal.builder()
-                .signalId(signalId)
-                .symbol(webhook.getSymbol())
-                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
-                .strategy(webhook.getStrategy())
-                .eventType(webhook.getEventType())
-                .event(webhook.getStrategy() + " - " + webhook.getEventType())
-                .marketContext(context)
-                .intradayContext(intradayContext)
-                .timestamp(LocalDateTime.now())
-                .status("INVALID")
-                .action(String.format("Low confidence: %d/100 (threshold: %d)",
-                        intradayContext.getConfidenceScore(), CONFIDENCE_THRESHOLD))
-                .build();
-    }
-
-    private TradeSignal createInvalidSignal(final String signalId, final TradingViewWebhook webhook, final String reason) {
-        return TradeSignal.builder()
-                .signalId(signalId)
-                .symbol(webhook.getSymbol())
-                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
-                .strategy(webhook.getStrategy())
-                .eventType(webhook.getEventType())
-                .event(webhook.getStrategy() + " - " + webhook.getEventType())
-                .timestamp(LocalDateTime.now())
-                .status("INVALID")
-                .action("Data quality insufficient - " + reason)
-                .build();
-    }
-
-    private TradeSignal createBlockedSignal(final String signalId, final TradingViewWebhook webhook,
-                                             final MarketContext context, final IntradayContext intradayContext,
-                                             final String reason) {
-        return TradeSignal.builder()
-                .signalId(signalId)
-                .symbol(webhook.getSymbol())
-                .direction(mapDirectionToTradeDirection(webhook.getDirection()))
-                .strategy(webhook.getStrategy())
-                .eventType(webhook.getEventType())
-                .event(webhook.getStrategy() + " - " + webhook.getEventType())
-                .marketContext(context)
-                .intradayContext(intradayContext)
-                .timestamp(LocalDateTime.now())
-                .status("INVALID")
-                .action("Blocked: " + reason)
+    private AiAssessment createLowConfidenceAssessment(final IntradayContext intradayContext) {
+        return AiAssessment.builder()
+                .setupQuality("C")
+                .riskFactors(java.util.List.of(
+                        String.format("Low confidence score: %d/100", intradayContext.getConfidenceScore()),
+                        "Market microstructure not favorable",
+                        "Smart gating threshold not met"
+                ))
+                .invalidation("Setup does not meet minimum confidence criteria")
+                .summary(String.format("Setup rejected by smart gating (confidence: %d/100, threshold: %d/100). " +
+                        "AI analysis skipped for cost savings.",
+                        intradayContext.getConfidenceScore(), claudeConfig.getSmartGatingThreshold()))
+                .alignmentScore(intradayContext.getConfidenceScore())
+                .keyObservation("Smart gating rejection - AI analysis not performed")
                 .build();
     }
 
@@ -238,9 +198,6 @@ public class SignalProcessingService {
                 .build();
     }
 
-    /**
-     * Maps webhook direction (bullish/bearish) to trade direction (LONG/SHORT)
-     */
     private String mapDirectionToTradeDirection(final String direction) {
         if (direction == null) {
             return "UNKNOWN";

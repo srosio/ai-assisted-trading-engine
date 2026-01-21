@@ -12,6 +12,7 @@ spring:
 
 dynamodb:
   table-name: ${DYNAMODB_TABLE:journal_entries}
+  cache-table-name: ${DYNAMODB_CACHE_TABLE:ai_cache}
 
 aws:
   region: ${AWS_REGION:us-east-1}
@@ -35,10 +36,21 @@ logging:
 claude:
   api-key: ${CLAUDE_API_KEY:mock-key}
   api-url: https://api.anthropic.com/v1/messages
-  model: claude-sonnet-4-5-20250929
+
+  # AI Models
+  model: claude-sonnet-4-5-20250929  # Primary model for full analysis
+  haiku-model: claude-haiku-4-20250514  # Fast model for pre-filtering (90% cheaper)
+
   max-tokens: 1024
   temperature: 0.3
   timeout-seconds: 30
+
+  # AI Cost Optimizations
+  enable-smart-gating: true  # Skip AI for low-confidence signals (30-40% savings)
+  enable-haiku-prefilter: true  # Use Haiku for initial screening (90% cheaper)
+  enable-caching: true  # Cache similar market conditions (20-30% savings)
+
+  smart-gating-threshold: 60  # Minimum confidence score for AI analysis (0-100)
 
 # Binance Configuration
 # Note: Rate limiting is automatically enforced (1200 weight/minute)

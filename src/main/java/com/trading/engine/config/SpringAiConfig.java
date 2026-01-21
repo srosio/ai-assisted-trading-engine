@@ -39,11 +39,32 @@ public class SpringAiConfig {
                 .withTemperature(claudeConfig.getTemperature())
                 .build();
 
+        log.info("Configured Sonnet model: {}", claudeConfig.getModel());
+        return new AnthropicChatModel(anthropicApi, options);
+    }
+
+    @Bean("haikuChatModel")
+    public AnthropicChatModel haikuChatModel(
+            final AnthropicApi anthropicApi,
+            final ClaudeConfig claudeConfig) {
+
+        final var options = AnthropicChatOptions.builder()
+                .withModel(claudeConfig.getHaikuModel())
+                .withMaxTokens(claudeConfig.getMaxTokens())
+                .withTemperature(claudeConfig.getTemperature())
+                .build();
+
+        log.info("Configured Haiku model: {} (for pre-filtering)", claudeConfig.getHaikuModel());
         return new AnthropicChatModel(anthropicApi, options);
     }
 
     @Bean
     public ChatClient chatClient(final AnthropicChatModel chatModel) {
         return ChatClient.builder(chatModel).build();
+    }
+
+    @Bean("haikuChatClient")
+    public ChatClient haikuChatClient(final AnthropicChatModel haikuChatModel) {
+        return ChatClient.builder(haikuChatModel).build();
     }
 }

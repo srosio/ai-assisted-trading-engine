@@ -3,107 +3,259 @@ package com.trading.engine.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.trading.engine.config.ClaudeConfig;
-import com.trading.engine.domain.AiAssessment;
-import com.trading.engine.domain.ExecutionPlan;
-import com.trading.engine.domain.IntradayContext;
-import com.trading.engine.domain.MarketContext;
-import com.trading.engine.domain.TradingViewWebhook;
-import lombok.RequiredArgsConstructor;
+import com.trading.engine.domain.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AiAnalysisService {
 
-    private final ChatClient chatClient;
+    private final ChatClient sonnetClient;
+    private final ChatClient haikuClient;
     private final ClaudeConfig claudeConfig;
     private final StaticAnalysisService staticAnalysis;
+    private final AiCacheService cacheService;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    public AiAssessment analyzeContext(final MarketContext context,
-                                        final TradingViewWebhook webhook,
-                                        final IntradayContext intradayContext) {
-        log.info("Requesting AI analysis for {} - Strategy: {}, Event: {}",
-                context.getSymbol(), webhook.getStrategy(), webhook.getEventType());
+    public AiAnalysisService(
+            ChatClient chatClient,
+            @Qualifier("haikuChatClient") ChatClient haikuChatClient,
+            ClaudeConfig claudeConfig,
+            StaticAnalysisService staticAnalysis,
+            AiCacheService cacheService) {
+        this.sonnetClient = chatClient;
+        this.haikuClient = haikuChatClient;
+        this.claudeConfig = claudeConfig;
+        this.staticAnalysis = staticAnalysis;
+        this.cacheService = cacheService;
+    }
+
+    public CombinedAiAnalysis analyzeCombined(final MarketContext context,
+                                                final TradingViewWebhook webhook,
+                                                final IntradayContext intradayContext,
+                                                final String direction) {
+        log.info("Starting optimized AI analysis for {} - Strategy: {}, Confidence: {}",
+                webhook.getSymbol(), webhook.getStrategy(), intradayContext.getConfidenceScore());
 
         try {
-            // Build compact context with strategy event data
-            final var compactContext = objectMapper.createObjectNode();
-
-            // Strategy event data (primary analysis focus)
-            compactContext.put("strategy", webhook.getStrategy());
-            compactContext.put("eventType", webhook.getEventType());
-            compactContext.put("direction", webhook.getDirection());
-            compactContext.put("tf", webhook.getTimeframe());
-            compactContext.put("session", webhook.getSession());
-
-            // Context fields (if available)
-            if (webhook.getSweptLevel() != null) {
-                compactContext.put("sweptLevel", webhook.getSweptLevel());
-            }
-            if (webhook.getHtfBias() != null) {
-                compactContext.put("htfBias", webhook.getHtfBias());
-            }
-            if (webhook.getDisplacement() != null) {
-                compactContext.put("displacement", webhook.getDisplacement());
-            }
-            if (webhook.getVolumeSpike() != null) {
-                compactContext.put("volumeSpike", webhook.getVolumeSpike());
+            if (claudeConfig.isEnableCaching()) {
+                final var cached = cacheService.get(context, webhook, intradayContext);
+                if (cached != null) {
+                    return cached;
+                }
             }
 
-            // Market context (supporting data)
-            compactContext.put("sym", context.getSymbol());
-            compactContext.put("px", context.getCurrentPrice());
-            compactContext.put("htf", context.getHtfBias());
-            compactContext.put("sess", context.getSession());
-            compactContext.put("oiChg", context.getOiChangePercent());
-            compactContext.put("fund", context.getFundingRate());
-            compactContext.put("vol", context.getVolatility());
+            if (claudeConfig.isEnableHaikuPrefilter()) {
+                log.info("Pre-filtering with Haiku model");
+                final var haikuQuality = performHaikuPrefilter(context, webhook, intradayContext);
 
-            final var contextJson = objectMapper.writeValueAsString(compactContext);
-            final var outputConverter = new BeanOutputConverter<>(AiAssessment.class);
+                if ("C".equals(haikuQuality)) {
+                    log.info("Haiku rejected setup (Quality C) - skipping Sonnet analysis");
+                    final var rejected = createRejectedAnalysis(haikuQuality);
 
-            // Strategy-specific prompt based on strategy name
+                    // Cache rejection to avoid re-analysis
+                    if (claudeConfig.isEnableCaching()) {
+                        cacheService.put(context, webhook, intradayContext, rejected);
+                    }
+
+                    return rejected;
+                }
+
+                log.info("Haiku approved setup (Quality {}) - proceeding with Sonnet analysis", haikuQuality);
+            }
+
+            final var analysis = performCombinedAnalysis(context, webhook, intradayContext, direction);
+
+            if (claudeConfig.isEnableCaching()) {
+                cacheService.put(context, webhook, intradayContext, analysis);
+            }
+
+            log.info("AI analysis complete - Quality: {}, Model: {}",
+                    analysis.getSetupQuality(),
+                    analysis.getExecutionModel() != null ? analysis.getExecutionModel() : "none");
+
+            return analysis;
+
+        } catch (final Exception e) {
+            log.warn("AI unavailable, using static analysis: {}", e.getMessage());
+            return convertToCombined(
+                    staticAnalysis.generateStaticAssessment(context, intradayContext, webhook),
+                    staticAnalysis.generateStaticExecutionPlan(
+                            context, intradayContext, webhook, direction,
+                            getStrategyName(webhook.getStrategy(), webhook.getEventType())
+                    )
+            );
+        }
+    }
+
+    private String performHaikuPrefilter(final MarketContext context,
+                                          final TradingViewWebhook webhook,
+                                                final IntradayContext intradayContext) {
+        try {
+            final var compactContext = buildCompactContext(context, webhook, intradayContext);
             final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
-            final var userMessage = "Analyze " + strategyContext.get("name") + " strategy alert:\n\n" +
-                    "Strategy profile: " + strategyContext.get("profile") + "\n" +
-                    "Expected: " + strategyContext.get("expected") + "\n\n" +
-                    "Assess setup quality based on event type (" + webhook.getEventType() +
-                    "), direction (" + webhook.getDirection() + "), and market context.\n" +
-                    "Identify risks that could reduce win rate below expected %.\n" +
-                    "Classify: A (all criteria met), B (good but minor concerns), C (reject).\n\n" +
-                    contextJson + "\n\n" +
-                    outputConverter.getFormat();
 
-            final var response = chatClient.prompt()
+            final var userMessage = "Quick quality check for " + strategyContext.get("name") + " setup:\n" +
+                    "Profile: " + strategyContext.get("profile") + "\n" +
+                    "Expected: " + strategyContext.get("expected") + "\n\n" +
+                    "Assess if this setup meets minimum criteria. Respond with ONLY one letter:\n" +
+                    "A = Excellent (all criteria met)\n" +
+                    "B = Good (most criteria met, minor concerns)\n" +
+                    "C = Reject (missing key criteria)\n\n" +
+                    compactContext;
+
+            final var response = haikuClient.prompt()
                     .user(userMessage)
                     .call()
                     .content();
 
-            final var assessment = outputConverter.convert(response);
-            validateAssessment(assessment);
+            // Extract quality from response (should be just "A", "B", or "C")
+            final var quality = response.trim().substring(0, 1).toUpperCase();
 
-            log.info("AI Assessment complete - Quality: {}, Alignment: {}",
-                    assessment.getSetupQuality(), assessment.getAlignmentScore());
+            if (List.of("A", "B", "C").contains(quality)) {
+                log.info("Haiku pre-filter result: Quality {}", quality);
+                return quality;
+            }
 
-            return assessment;
+            log.warn("Haiku returned invalid quality: {}, defaulting to B", response);
+            return "B";  // Default to B (proceed with Sonnet analysis)
 
         } catch (final Exception e) {
-            log.warn("AI unavailable, using static analysis: {}", e.getMessage());
-            return staticAnalysis.generateStaticAssessment(context, intradayContext, webhook);
+            log.warn("Haiku pre-filter failed: {}, proceeding with Sonnet", e.getMessage());
+            return "B";  // On error, proceed with Sonnet analysis
         }
     }
 
-    /**
-     * Get strategy-specific context based on strategy name and event type
-     */
+    private CombinedAiAnalysis performCombinedAnalysis(final MarketContext context,
+                                                        final TradingViewWebhook webhook,
+                                                        final IntradayContext intradayContext,
+                                                        final String direction) throws Exception {
+        final var compactContext = buildCompactContext(context, webhook, intradayContext);
+        final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
+        final var outputConverter = new BeanOutputConverter<>(CombinedAiAnalysis.class);
+
+        final var userMessage = "Analyze " + strategyContext.get("name") + " setup and create execution plan:\n\n" +
+                "PART 1 - SETUP ASSESSMENT:\n" +
+                "Profile: " + strategyContext.get("profile") + "\n" +
+                "Expected criteria: " + strategyContext.get("expected") + "\n" +
+                "Assess setup quality (A/B/C), identify risk factors, and invalidation conditions.\n\n" +
+                "PART 2 - EXECUTION PLAN (if quality is A or B):\n" +
+                "Target profile: " + strategyContext.get("profile") + "\n" +
+                "Generate: entry model, entry zone, stop logic, targets matching expected R:R, invalidation.\n" +
+                "Guidelines:\n" +
+                "- Liquidity Sweeps: Stop beyond swept level, 3-5R targets\n" +
+                "- Candle 2 Closure: Tight stops below pattern, 2-3R targets\n" +
+                "- Breakout: Inside range stops, 5-10R+ targets\n" +
+                "If quality is C, leave execution fields empty.\n\n" +
+                "Market Context:\n" + compactContext + "\n\n" +
+                "Direction: " + direction + "\n\n" +
+                outputConverter.getFormat();
+
+        final var response = sonnetClient.prompt()
+                .user(userMessage)
+                .call()
+                .content();
+
+        final var combined = outputConverter.convert(response);
+        validateCombinedAnalysis(combined);
+
+        return combined;
+    }
+
+    private String buildCompactContext(final MarketContext context,
+                                        final TradingViewWebhook webhook,
+                                        final IntradayContext intradayContext) throws Exception {
+        final var ctx = objectMapper.createObjectNode();
+
+        // Strategy event data
+        ctx.put("strategy", webhook.getStrategy());
+        ctx.put("eventType", webhook.getEventType());
+        ctx.put("direction", webhook.getDirection());
+        ctx.put("tf", webhook.getTimeframe());
+        ctx.put("session", webhook.getSession());
+
+        // Optional context fields
+        if (webhook.getSweptLevel() != null) ctx.put("sweptLevel", webhook.getSweptLevel());
+        if (webhook.getHtfBias() != null) ctx.put("htfBias", webhook.getHtfBias());
+        if (webhook.getDisplacement() != null) ctx.put("displacement", webhook.getDisplacement());
+        if (webhook.getVolumeSpike() != null) ctx.put("volumeSpike", webhook.getVolumeSpike());
+        if (webhook.getCurrentPrice() != null) ctx.put("currentPrice", webhook.getCurrentPrice());
+        if (webhook.getSuggestedStopLoss() != null) ctx.put("suggestedStopLoss", webhook.getSuggestedStopLoss());
+
+        // Market context
+        ctx.put("sym", context.getSymbol());
+        ctx.put("px", context.getCurrentPrice());
+        ctx.put("htf", context.getHtfBias());
+        ctx.put("sess", context.getSession());
+        ctx.put("oiChg", context.getOiChangePercent());
+        ctx.put("fund", context.getFundingRate());
+        ctx.put("vol", context.getVolatility());
+
+        // Intraday context
+        ctx.put("t15", intradayContext.getTrendBias15m());
+        ctx.put("t5", intradayContext.getTrendBias5m());
+        ctx.put("oiPx", intradayContext.getOiPriceBehavior());
+        ctx.put("volConf", intradayContext.getVolumeConfirmation());
+        ctx.put("narrative", intradayContext.getSessionNarrative());
+        ctx.put("conf", intradayContext.getConfidenceScore());
+
+        return objectMapper.writeValueAsString(ctx);
+    }
+
+    private CombinedAiAnalysis createRejectedAnalysis(String quality) {
+        return CombinedAiAnalysis.builder()
+                .setupQuality(quality)
+                .riskFactors(List.of("Setup does not meet minimum criteria"))
+                .invalidation("Failed pre-screening")
+                .summary("Setup rejected by AI pre-filter")
+                .alignmentScore(30)
+                .keyObservation("Pre-filter rejection - Sonnet analysis skipped")
+                .build();
+    }
+
+    private CombinedAiAnalysis convertToCombined(AiAssessment assessment, ExecutionPlan executionPlan) {
+        final var builder = CombinedAiAnalysis.builder()
+                .setupQuality(assessment.getSetupQuality())
+                .riskFactors(assessment.getRiskFactors())
+                .invalidation(assessment.getInvalidation())
+                .summary(assessment.getSummary())
+                .alignmentScore(assessment.getAlignmentScore())
+                .keyObservation(assessment.getKeyObservation());
+
+        if (executionPlan != null) {
+            builder.executionModel(executionPlan.getExecutionModel())
+                    .entryZoneLow(executionPlan.getEntryZoneLow())
+                    .entryZoneHigh(executionPlan.getEntryZoneHigh())
+                    .stopLogic(executionPlan.getStopLogic())
+                    .suggestedStopPrice(executionPlan.getSuggestedStopPrice())
+                    .targets(executionPlan.getTargets())
+                    .invalidationConditions(executionPlan.getInvalidationConditions())
+                    .riskNotes(executionPlan.getRiskNotes())
+                    .executionNotes(executionPlan.getExecutionNotes());
+        }
+
+        return builder.build();
+    }
+
+    private void validateCombinedAnalysis(final CombinedAiAnalysis analysis) {
+        if (analysis.getSetupQuality() == null ||
+            !List.of("A", "B", "C").contains(analysis.getSetupQuality())) {
+            throw new IllegalStateException("Invalid setup quality: " + analysis.getSetupQuality());
+        }
+
+        if (analysis.getAlignmentScore() == null) {
+            analysis.setAlignmentScore(getDefaultAlignmentScore(analysis.getSetupQuality()));
+        } else if (analysis.getAlignmentScore() < 0 || analysis.getAlignmentScore() > 100) {
+            analysis.setAlignmentScore(Math.max(0, Math.min(100, analysis.getAlignmentScore())));
+        }
+    }
+
     private java.util.Map<String, String> getStrategyContextByName(final String strategy, final String eventType) {
         if (strategy == null) {
             return getDefaultStrategyContext(eventType);
@@ -111,7 +263,6 @@ public class AiAnalysisService {
 
         final var strategyLower = strategy.toLowerCase();
 
-        // Liquidity Sweeps Strategy (45-55% WR, 1:3-1:5 R:R)
         if (strategyLower.contains("liquidity") || strategyLower.contains("sweep")) {
             return java.util.Map.of(
                 "name", "Liquidity Sweeps",
@@ -120,7 +271,6 @@ public class AiAnalysisService {
             );
         }
 
-        // Candle 2 Closure with RSI Strategy (60-70% WR, 1:2-1:3 R:R)
         if (strategyLower.contains("candle") || strategyLower.contains("closure") || strategyLower.contains("rsi")) {
             return java.util.Map.of(
                 "name", "Candle 2 Closure with RSI",
@@ -129,7 +279,6 @@ public class AiAnalysisService {
             );
         }
 
-        // Breakout Strategy (30-40% WR, 1:5-1:10+ R:R)
         if (strategyLower.contains("breakout") || strategyLower.contains("consolidation")) {
             return java.util.Map.of(
                 "name", "Breakout Strategy",
@@ -138,13 +287,9 @@ public class AiAnalysisService {
             );
         }
 
-        // Fallback to event type-based context
         return getDefaultStrategyContext(eventType);
     }
 
-    /**
-     * Get default strategy context based on event type when strategy name is unknown
-     */
     private java.util.Map<String, String> getDefaultStrategyContext(final String eventType) {
         if (eventType == null) {
             return java.util.Map.of(
@@ -183,28 +328,8 @@ public class AiAnalysisService {
         };
     }
 
-    private void validateAssessment(final AiAssessment assessment) {
-        if (assessment.getSetupQuality() == null ||
-            !List.of("A", "B", "C").contains(assessment.getSetupQuality())) {
-            throw new IllegalStateException("Invalid setup quality: " + assessment.getSetupQuality());
-        }
-
-        if (assessment.getRiskFactors() == null || assessment.getRiskFactors().isEmpty()) {
-            log.warn("AI did not provide risk factors");
-        }
-
-        if (assessment.getInvalidation() == null || assessment.getInvalidation().isEmpty()) {
-            log.warn("AI did not provide invalidation criteria");
-        }
-
-        if (assessment.getAlignmentScore() != null) {
-            if (assessment.getAlignmentScore() < 0 || assessment.getAlignmentScore() > 100) {
-                log.warn("Invalid alignment score: {}, capping to range", assessment.getAlignmentScore());
-                assessment.setAlignmentScore(Math.max(0, Math.min(100, assessment.getAlignmentScore())));
-            }
-        } else {
-            assessment.setAlignmentScore(getDefaultAlignmentScore(assessment.getSetupQuality()));
-        }
+    private String getStrategyName(String strategy, String eventType) {
+        return getStrategyContextByName(strategy, eventType).get("name");
     }
 
     private int getDefaultAlignmentScore(final String quality) {
@@ -214,125 +339,6 @@ public class AiAnalysisService {
             case "C" -> 40;
             default -> 50;
         };
-    }
-
-    private AiAssessment createFallbackAssessment(final String errorMessage) {
-        log.warn("Creating fallback assessment due to AI error: {}", errorMessage);
-
-        return AiAssessment.builder()
-                .setupQuality("C")
-                .riskFactors(List.of("AI analysis unavailable", "Manual review required"))
-                .invalidation("Unable to determine - manual analysis needed")
-                .summary("AI analysis failed. This setup requires manual review before consideration.")
-                .alignmentScore(30)
-                .keyObservation("System error - do not trade without manual confirmation")
-                .build();
-    }
-
-    public ExecutionPlan generateExecutionPlan(final MarketContext context,
-                                                final IntradayContext intradayContext,
-                                                final TradingViewWebhook webhook,
-                                                final String direction) {
-        log.info("Generating execution plan for {} - Direction: {} - Strategy: {}, Event: {}",
-                context.getSymbol(), direction, webhook.getStrategy(), webhook.getEventType());
-
-        try {
-            // Build compact context with strategy event data and market context
-            final var ctx = objectMapper.createObjectNode();
-
-            // Strategy event data
-            ctx.put("strategy", webhook.getStrategy());
-            ctx.put("eventType", webhook.getEventType());
-            ctx.put("direction", webhook.getDirection());
-            ctx.put("tf", webhook.getTimeframe());
-            ctx.put("session", webhook.getSession());
-
-            // Context fields (if available)
-            if (webhook.getSweptLevel() != null) {
-                ctx.put("sweptLevel", webhook.getSweptLevel());
-            }
-            if (webhook.getCurrentPrice() != null) {
-                ctx.put("currentPrice", webhook.getCurrentPrice());
-            }
-            if (webhook.getSuggestedStopLoss() != null) {
-                ctx.put("suggestedStopLoss", webhook.getSuggestedStopLoss());
-            }
-
-            // Market context
-            ctx.put("sym", context.getSymbol());
-            ctx.put("dir", direction);
-            ctx.put("px", context.getCurrentPrice());
-            ctx.put("sess", context.getSession());
-            ctx.put("htf", context.getHtfBias());
-            ctx.put("vol", context.getVolatility());
-            ctx.put("fund", context.getFundingRate());
-
-            // Intraday context (compact keys)
-            ctx.put("t15", intradayContext.getTrendBias15m());
-            ctx.put("t5", intradayContext.getTrendBias5m());
-            ctx.put("oiPx", intradayContext.getOiPriceBehavior());
-            ctx.put("volConf", intradayContext.getVolumeConfirmation());
-            ctx.put("narrative", intradayContext.getSessionNarrative());
-            ctx.put("conf", intradayContext.getConfidenceScore());
-
-            final var contextJson = objectMapper.writeValueAsString(ctx);
-            final var outputConverter = new BeanOutputConverter<>(ExecutionPlan.class);
-
-            // Strategy-specific execution planning
-            final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
-            final var userMessage = "Plan execution for " + strategyContext.get("name") + " strategy:\n\n" +
-                    "Target profile: " + strategyContext.get("profile") + "\n\n" +
-                    "Generate plan: entry model, entry zone, stop logic (match strategy risk profile), " +
-                    "targets (match expected R:R from profile), invalidation conditions.\n\n" +
-                    "For Liquidity Sweeps: Stop beyond swept level, 3-5R targets\n" +
-                    "For Candle 2 Closure: Tight stops below pattern, 2-3R targets\n" +
-                    "For Breakout: Inside range stops, 5-10R+ targets\n" +
-                    "For Reversal events: Stops beyond invalidation level\n" +
-                    "For Continuation events: Stops below pullback low\n\n" +
-                    contextJson + "\n\n" +
-                    outputConverter.getFormat();
-
-            final var response = chatClient.prompt()
-                    .user(userMessage)
-                    .call()
-                    .content();
-
-            final var executionPlan = outputConverter.convert(response);
-
-            log.info("Execution plan generated - Model: {}, Targets: {}",
-                    executionPlan.getExecutionModel(),
-                    executionPlan.getTargets() != null ? executionPlan.getTargets().size() : 0);
-
-            return executionPlan;
-
-        } catch (final Exception e) {
-            log.warn("AI unavailable for execution plan, using static analysis: {}", e.getMessage());
-            final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
-            return staticAnalysis.generateStaticExecutionPlan(
-                    context, intradayContext, webhook, direction, strategyContext.get("name")
-            );
-        }
-    }
-
-    /**
-     * Create fallback execution plan when AI fails
-     */
-    private ExecutionPlan createFallbackExecutionPlan(final MarketContext context, final String direction) {
-        log.warn("Creating fallback execution plan");
-
-        final var currentPrice = context.getCurrentPrice();
-
-        return ExecutionPlan.builder()
-                .executionModel("manual")
-                .entryZoneLow(currentPrice)
-                .entryZoneHigh(currentPrice)
-                .stopLogic("Manual - AI unavailable")
-                .suggestedStopPrice(currentPrice)
-                .targets(List.of())
-                .invalidationConditions(List.of("Manual review required - AI system unavailable"))
-                .riskNotes(List.of("AI execution plan unavailable", "Human trader must plan manually"))
-                .executionNotes("Fallback plan - manual execution required")
-                .build();
     }
 
     public boolean isHealthy() {
