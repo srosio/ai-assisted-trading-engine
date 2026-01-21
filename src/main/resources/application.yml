@@ -10,29 +10,11 @@ spring:
     function:
       definition: processWebhook;getJournalEntries;getStatistics
 
-  # datasource/jpa/flyway removed for DynamoDB
-
-  data:
-    redis:
-      host: ${REDIS_URL:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: 2000ms
-
 dynamodb:
   table-name: ${DYNAMODB_TABLE:journal_entries}
 
 aws:
   region: ${AWS_REGION:us-east-1}
-
-
-
-  cache:
-    type: ${SPRING_CACHE_TYPE:simple}
-    redis:
-      time-to-live: 10000
-
-# server: port: 8080 # Not needed for Lambda
 
 # Webhook API Security
 webhook:
@@ -65,7 +47,7 @@ binance:
   api-key: ${BINANCE_API_KEY:mock-key}
   api-secret: ${BINANCE_API_SECRET:mock-secret}
   base-url: https://fapi.binance.com
-  cache-seconds: 10  # Redis cache TTL reduces API calls
+  cache-seconds: 10  # In-memory cache TTL reduces API calls
   timeout-seconds: 10
 
 # Telegram Configuration
