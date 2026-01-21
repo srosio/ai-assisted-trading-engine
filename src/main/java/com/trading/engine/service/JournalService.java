@@ -9,7 +9,7 @@ import com.trading.engine.repository.JournalEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+// import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,7 +26,7 @@ public class JournalService {
     private final TradingConfig tradingConfig;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    @Transactional
+    // @Transactional // DynamoDB transactions are different, disabling for now
     public void createEntry(final TradeSignal signal) {
         log.info("Creating journal entry for signal: {}", signal.getSignalId());
 
@@ -46,6 +46,7 @@ public class JournalService {
                     .rulesPassed(signal.getRuleResult().isPassed())
                     .session(signal.getMarketContext().getSession())
                     .status(signal.getStatus())
+                    .createdAt(LocalDateTime.now()) // Ensure createdAt is set
                     .build();
 
             // Set optional fields from execution plan if available
@@ -55,11 +56,8 @@ public class JournalService {
                 }
             }
 
-            // Risk calculations (entry, stop, size, etc.) are done manually by human trader
-            // These fields remain null and can be filled in later via updateTradeOutcome
-
             final var saved = journalRepository.save(entry);
-            log.info("Journal entry created with ID: {}", saved.getId());
+            log.info("Journal entry created with Signal ID: {}", saved.getSignalId());
 
         } catch (final Exception e) {
             log.error("Error creating journal entry: {}", e.getMessage(), e);
@@ -69,14 +67,18 @@ public class JournalService {
 
     public long getTodayTradeCount() {
         final var startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-        return journalRepository.countTradesToday(startOfDay);
+        // Simple scan filter (optimize with GSI later)
+        return journalRepository.findAll().stream()
+                .filter(e -> e.getCreatedAt() != null && e.getCreatedAt().isAfter(startOfDay))
+                .count();
     }
 
     public BigDecimal getTodayPnL() {
         final var startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-        final var todayTrades = journalRepository.findTakenTradesToday(startOfDay);
 
-        return todayTrades.stream()
+        return journalRepository.findAll().stream()
+                .filter(e -> e.getCreatedAt() != null && e.getCreatedAt().isAfter(startOfDay))
+                .filter(e -> Boolean.TRUE.equals(e.getTradeTaken()))
                 .map(JournalEntry::getPnl)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -96,5 +98,5 @@ public class JournalService {
 
         return todayPnL.compareTo(maxLoss) >= 0;
     }
-    
+
 }

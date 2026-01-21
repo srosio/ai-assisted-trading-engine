@@ -1,30 +1,16 @@
 spring:
+  main:
+    web-application-type: none
+    lazy-initialization: true
+    banner-mode: off
   application:
     name: ai-assisted-trading-engine
 
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/trading_engine}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:root}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
+  cloud:
+    function:
+      definition: processWebhook;getJournalEntries;getStatistics
 
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        jdbc:
-          time_zone: UTC
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
+  # datasource/jpa/flyway removed for DynamoDB
 
   data:
     redis:
@@ -33,15 +19,20 @@ spring:
       password: ${REDIS_PASSWORD:}
       timeout: 2000ms
 
+dynamodb:
+  table-name: ${DYNAMODB_TABLE:journal_entries}
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+
+
+
   cache:
     type: ${SPRING_CACHE_TYPE:simple}
     redis:
       time-to-live: 10000
 
-server:
-  port: 8080
-  compression:
-    enabled: true
+# server: port: 8080 # Not needed for Lambda
 
 # Webhook API Security
 webhook:
@@ -51,11 +42,12 @@ webhook:
 logging:
   level:
     root: INFO
-    com.trading.engine: DEBUG
+    com.trading.engine: INFO
     org.springframework.web: INFO
-    org.hibernate.SQL: DEBUG
-#  pattern:
-#    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    org.hibernate.SQL: INFO
+  pattern:
+    console: "%msg%n" # CloudWatch adds timestamps automatically
+
 
 # Claude AI Configuration
 claude:

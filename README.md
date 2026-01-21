@@ -1,72 +1,59 @@
-# AI-Assisted Crypto Trading Engine
+# AI-Assisted Crypto Trading Engine (Serverless)
 
 A professional, rule-based crypto trading system that uses AI **only** for market context analysis. Built with discipline, risk control, and auditability at its core.
 
-## Quick Start
+**Now Re-architected for AWS Serverless.**
+
+## Quick Start (Local Build)
 
 ```bash
-# 1. Clone and setup
+# 1. Clone
 git clone <repository-url>
 cd ai-assisted-trading-engine
 
-# 2. Configure environment
-cp .env.example .env
-nano .env  # Add your API keys
+# 2. Build Project
+./gradlew build -x test
 
-# 3. Start services
-docker-compose up -d
-
-# 4. Test the API
-curl http://localhost:8080/api/webhook/health
+# 3. Deploy to AWS (Requires AWS CLI configured)
+./scripts/deploy.sh <your-s3-bucket-name>
 ```
-
-**See [SETUP.md](SETUP.md) for complete installation instructions.**
 
 ## Features
 
-- ✅ **Rule-Based Trading**: Strict, non-negotiable trading rules for risk management
-- 🤖 **AI Context Analysis**: Claude AI provides market context (not trading decisions)
-- 📊 **TradingView Integration**: Webhook-based signal processing from Pine Script strategies
-- 🔒 **Risk Management**: Position sizing, stop-loss, R-multiple tracking
-- 📝 **Trade Journaling**: Comprehensive PostgreSQL-based trade journal
-- 🔔 **Telegram Notifications**: Real-time alerts for valid trade setups
-- ⚡ **Rate Limit Protection**: Automatic Binance API rate limiting and back-off
-- 🐳 **Docker Support**: Easy deployment with Docker Compose
+- ✅ **Serverless Architecture**: Runs on AWS Lambda with Snapdragon (Java 21) for zero-management scaling.
+- ✅ **Rule-Based Trading**: Strict, non-negotiable trading rules for risk management.
+- 🤖 **AI Context Analysis**: Claude AI provides market context (not trading decisions).
+- 📊 **TradingView Integration**: Webhook-based signal processing via API Gateway.
+- 🔒 **Risk Management**: Position sizing, stop-loss, R-multiple tracking.
+- 📝 **NoSQL Journal**: High-performance trade journal using Amazon DynamoDB.
+- 🔔 **Telegram Notifications**: Real-time alerts for valid trade setups.
 
 ## Architecture
 
 **Technology Stack:**
-- Java 21, Spring Boot 3.2
-- PostgreSQL 14 (persistent storage)
-- Redis 7 (caching)
-- Spring AI with Claude (Anthropic)
-- Binance Futures API
-- Telegram Bot API
+- **Runtime**: Java 21 (AWS Lambda SnapStart)
+- **Framework**: Spring Boot 3 + Spring Cloud Function
+- **Database**: Amazon DynamoDB (On-Demand)
+- **AI**: Spring AI with Claude (Anthropic)
+- **Infrastructure**: AWS SAM / CloudFormation
 
-**AI Usage:**
-- Market context analysis only (trend, sentiment, key levels)
-- Trading decisions driven by rules, not AI
-- Fully auditable AI interactions
-
-## Documentation
-
-- **[SETUP.md](SETUP.md)** - Complete setup and installation guide
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guide for contributors
-- **[docs/API_ENDPOINTS.md](docs/API_ENDPOINTS.md)** - REST API documentation
-- **[scripts/README.md](scripts/README.md)** - Deployment and service management
+**Key Changes from Legacy:**
+- **No Embedded Server**: Tomcat replaced by AWS Lambda invocation.
+- **No Connection Pools**: PostgreSQL replaced by DynamoDB HTTP API.
+- **Lazy Initialization**: Optimized for fast cold starts (~500ms with SnapStart).
 
 ## Project Structure
 
 ```
 ├── src/main/java/com/trading/engine/
-│   ├── config/              # Configuration (Security, APIs, Rate Limiting)
-│   ├── controller/          # REST endpoints
-│   ├── service/             # Business logic
-│   ├── model/               # Domain models
-│   └── repository/          # Data access
-├── docs/                    # Documentation
+│   ├── config/              # Functional Beans & Lambda Config
+│   ├── domain/              # DynamoDB Beans & Domain Models
+│   ├── service/             # Business Logic (Rule Engine, Signal Processing)
+│   ├── repository/          # DynamoDB Enhanced Client Repositories
+│   └── StreamLambdaHandler.java  # AWS Lambda Entry Point
+├── template.yaml            # AWS Infrastructure Definition (SAM)
 ├── scripts/                 # Deployment scripts
-└── docker-compose.yml       # Local development setup
+└── build.gradle             # Build configuration
 ```
 
 ## Trading Philosophy
@@ -81,3 +68,16 @@ This engine enforces **strict, non-negotiable rules**:
 6. **AI for Context Only**: AI analyzes but doesn't decide
 
 **The rules cannot be overridden.** AI provides context; rules make decisions.
+
+## Deployment
+
+The project includes a `deploy.sh` script that automates the AWS CloudFormation deployment.
+
+**Prerequisites:**
+1.  AWS CLI installed and configured.
+2.  An S3 bucket to store deployment artifacts.
+3.  DynamoDB Table `journal_entries` (created automatically by template).
+
+```bash
+./scripts/deploy.sh my-deployment-bucket
+```
