@@ -1,6 +1,8 @@
 package com.trading.engine.service;
 
 import com.trading.engine.config.TelegramConfig;
+import com.trading.engine.domain.AiAssessment;
+import com.trading.engine.domain.IntradayContext;
 import com.trading.engine.domain.TradeSignal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +11,8 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -37,141 +41,249 @@ public class NotificationService extends TelegramLongPollingBot {
     }
 
     private String formatSignalMessage(final TradeSignal signal) {
+        final var isValid = "VALID".equals(signal.getStatus());
+        
+        if (isValid) {
+            return formatValidSignal(signal);
+        } else {
+            return formatInvalidSignal(signal);
+        }
+    }
+    
+    /**
+     * Format VALID signal - actionable trade setup
+     */
+    private String formatValidSignal(final TradeSignal signal) {
         final var sb = new StringBuilder();
-        final var isValid = signal.getStatus().equals("VALID");
-
-        // Header with status
-        final var emoji = isValid ? "✅" : "⚠️";
-        sb.append(emoji).append(" <b>TRADE SIGNAL</b>\n");
-        sb.append("ID: ").append(escapeHtml(signal.getSignalId())).append("\n");
-        sb.append("Time: ").append(java.time.Instant.now()).append("\n\n");
-
-        // Signal basics with $ prefix
-        final var symbolWithPrefix = "$" + signal.getSymbol().replace("USDT", "");
-        sb.append("<b>").append(escapeHtml(symbolWithPrefix)).append(" ")
-                .append(escapeHtml(signal.getDirection()));
-        if (signal.getMarketContext() != null) {
-            sb.append(" @ ").append(signal.getMarketContext().getCurrentPrice());
-        }
-        sb.append("</b>\n");
-
-        // Display strategy and event type
-        if (signal.getStrategy() != null) {
-            sb.append(escapeHtml(signal.getStrategy())).append(" - ").append(escapeHtml(signal.getEventType()));
-        } else if (signal.getEvent() != null) {
-            sb.append(escapeHtml(signal.getEvent()));
-        }
-        if (signal.getMarketContext() != null) {
-            sb.append(" | ").append(escapeHtml(signal.getMarketContext().getSession()));
+        final var ctx = signal.getMarketContext();
+        final var ai = signal.getAiAssessment();
+        final var plan = signal.getExecutionPlan();
+        
+        // Header
+        sb.append("🟢 <b>TRADE SETUP - ").append(getQualityEmoji(ai)).append(" QUALITY</b>\n\n");
+        
+        // Symbol & Direction
+        final var symbol = "$" + signal.getSymbol().replace("USDT", "");
+        sb.append("<b>").append(symbol).append(" ").append(signal.getDirection()).append("</b>\n");
+        sb.append(signal.getStrategy()).append(" • ").append(signal.getEventType());
+        if (ctx != null) {
+            sb.append(" • ").append(ctx.getSession());
         }
         sb.append("\n\n");
-
-        // Market Analysis
-        if (signal.getIntradayContext() != null) {
-            final var ctx = signal.getIntradayContext();
-            sb.append("<b>📊 Market Analysis:</b>\n");
-            sb.append("• Trends (15m/5m/1m): ")
-                    .append(escapeHtml(ctx.getTrendBias15m())).append("/")
-                    .append(escapeHtml(ctx.getTrendBias5m())).append("/")
-                    .append(escapeHtml(ctx.getTrendBias1m())).append("\n");
-            sb.append("• Volume: ").append(escapeHtml(ctx.getVolumeConfirmation())).append("\n");
-            sb.append("• OI+Price: ").append(escapeHtml(ctx.getOiPriceBehavior())).append("\n");
-            sb.append("• Context: ").append(escapeHtml(ctx.getContextSummary())).append("\n");
-            sb.append("• Confidence: ").append(ctx.getConfidenceScore()).append("/100\n\n");
+        
+        // Price & Execution
+        sb.append("<b>💰 EXECUTION</b>\n");
+        if (ctx != null) {
+            sb.append("Current: <b>").append(ctx.getCurrentPrice()).append("</b>\n");
         }
-
-        // AI Analysis section
-        if (signal.getAiAssessment() != null) {
-            final var ai = signal.getAiAssessment();
-            sb.append("<b>🤖 AI Analysis:</b>\n");
-            sb.append("• Setup Quality: ").append(escapeHtml(ai.getSetupQuality())).append("\n");
-            sb.append("• HTF Alignment: ").append(ai.getAlignmentScore()).append("/100\n");
-
-            if (ai.getRiskFactors() != null && !ai.getRiskFactors().isEmpty()) {
-                sb.append("• Key Risk: ").append(escapeHtml(ai.getRiskFactors().get(0))).append("\n");
-            }
-
-            if (ai.getSummary() != null) {
-                // Get first sentence of summary
-                final var summary = ai.getSummary();
-                final var dotIndex = summary.indexOf('.');
-                final var firstSentence = dotIndex > 0 && dotIndex < 200
-                    ? summary.substring(0, dotIndex + 1)
-                    : (summary.length() > 200 ? summary.substring(0, 200) + "..." : summary);
-                sb.append("• Assessment: ").append(escapeHtml(firstSentence)).append("\n");
-            }
-            sb.append("\n");
-        }
-
-        // Execution Plan
-        if (signal.getExecutionPlan() != null) {
-            final var plan = signal.getExecutionPlan();
-            sb.append("<b>📍 Execution Plan:</b>\n");
-
+        if (plan != null) {
             if (plan.getEntryZoneLow() != null && plan.getEntryZoneHigh() != null) {
                 sb.append("Entry: ").append(plan.getEntryZoneLow())
-                        .append(" - ").append(plan.getEntryZoneHigh()).append("\n");
+                  .append(" - ").append(plan.getEntryZoneHigh());
+                if (plan.getExecutionModel() != null) {
+                    sb.append(" (").append(plan.getExecutionModel()).append(")");
+                }
+                sb.append("\n");
             }
-
             if (plan.getSuggestedStopPrice() != null) {
-                sb.append("Stop: ").append(plan.getSuggestedStopPrice()).append("\n");
+                sb.append("Stop Loss: <b>").append(plan.getSuggestedStopPrice()).append("</b>");
+                if (ctx != null && ctx.getCurrentPrice() != null) {
+                    final var risk = calculateRiskPercent(ctx.getCurrentPrice(), plan.getSuggestedStopPrice());
+                    sb.append(" (-").append(String.format("%.1f", risk)).append("%)");
+                }
+                sb.append("\n");
             }
-
             if (plan.getTargets() != null && !plan.getTargets().isEmpty()) {
-                sb.append("Targets: ");
-                for (int i = 0; i < Math.min(plan.getTargets().size(), 3); i++) {
-                    if (i > 0) sb.append(", ");
-                    sb.append(plan.getTargets().get(i).getPrice());
+                sb.append("Targets:\n");
+                for (int i = 0; i < Math.min(3, plan.getTargets().size()); i++) {
+                    final var target = plan.getTargets().get(i);
+                    sb.append("  T").append(i + 1).append(": ").append(target.getPrice());
+                    if (target.getRMultiple() != null) {
+                        sb.append(" (").append(String.format("%.1f", target.getRMultiple())).append("R)");
+                    }
+                    sb.append("\n");
                 }
-                sb.append("\n");
             }
-            sb.append("\n");
         }
-
-        // Warnings and Issues
+        sb.append("\n");
+        
+        // Market Insight
+        sb.append("<b>📊 MARKET INSIGHT</b>\n");
+        if (signal.getIntradayContext() != null) {
+            final var intraday = signal.getIntradayContext();
+            sb.append("Confidence: <b>").append(intraday.getConfidenceScore()).append("/100</b>\n");
+            sb.append("Trends: ").append(formatTrends(intraday)).append("\n");
+            sb.append("Setup: ").append(formatOiBehavior(intraday.getOiPriceBehavior())).append("\n");
+        }
+        if (ctx != null) {
+            if (ctx.getOiChangePercent() != null) {
+                sb.append("OI: ").append(formatOiChange(ctx.getOiChangePercent())).append("\n");
+            }
+            if (ctx.getFundingRate() != null) {
+                sb.append("Funding: ").append(formatFunding(ctx.getFundingRate())).append("\n");
+            }
+            if (ctx.getVolatility() != null) {
+                sb.append("Volatility: ").append(ctx.getVolatility()).append("\n");
+            }
+        }
+        sb.append("\n");
+        
+        // AI Assessment
+        if (ai != null) {
+            sb.append("<b>🤖 AI ASSESSMENT</b>\n");
+            sb.append("Quality: <b>").append(ai.getSetupQuality()).append("</b> | ");
+            sb.append("Alignment: ").append(ai.getAlignmentScore()).append("/100\n");
+            if (ai.getKeyObservation() != null) {
+                sb.append("💡 ").append(ai.getKeyObservation()).append("\n");
+            }
+        }
+        sb.append("\n");
+        
+        // Warnings
         if (signal.getExecutionChecklist() != null) {
-            final var checklist = signal.getExecutionChecklist();
-            final var hasWarnings = checklist.getWarnings() != null && !checklist.getWarnings().isEmpty();
-            final var hasBlockers = checklist.getBlockers() != null && !checklist.getBlockers().isEmpty();
-
-            if (hasWarnings || hasBlockers) {
-                sb.append("<b>⚠️ Review Points:</b>\n");
-                if (hasBlockers) {
-                    for (final var blocker : checklist.getBlockers()) {
-                        sb.append("🚫 ").append(escapeHtml(blocker)).append("\n");
-                    }
-                }
-                if (hasWarnings) {
-                    for (final var warning : checklist.getWarnings()) {
-                        sb.append("⚠️ ").append(escapeHtml(warning)).append("\n");
-                    }
+            final var warnings = signal.getExecutionChecklist().getWarnings();
+            if (warnings != null && !warnings.isEmpty()) {
+                sb.append("<b>⚠️ WARNINGS</b>\n");
+                for (final var warning : warnings) {
+                    sb.append("• ").append(warning).append("\n");
                 }
                 sb.append("\n");
             }
         }
-
-        // Final recommendation
-        sb.append("<b>Recommendation:</b> ");
-        if (isValid) {
-            sb.append("✅ Setup meets criteria - ready for execution\n");
-        } else {
-            sb.append("⚠️ Review carefully - ");
-            sb.append(escapeHtml(signal.getAction())).append("\n");
-        }
-
+        
+        // Action
+        sb.append("<b>✅ ACTION: READY TO TRADE</b>\n");
+        sb.append("Review execution plan and enter position\n");
+        
         return sb.toString();
     }
-
+    
     /**
-     * Escape HTML special characters to prevent formatting issues
+     * Format INVALID signal - rejected setup
      */
-    private String escapeHtml(final String text) {
-        if (text == null) {
-            return "";
+    private String formatInvalidSignal(final TradeSignal signal) {
+        final var sb = new StringBuilder();
+        final var ctx = signal.getMarketContext();
+        final var ai = signal.getAiAssessment();
+        
+        // Header
+        sb.append("🔴 <b>SETUP REJECTED</b>\n\n");
+        
+        // Symbol & Direction
+        final var symbol = "$" + signal.getSymbol().replace("USDT", "");
+        sb.append("<b>").append(symbol).append(" ").append(signal.getDirection()).append("</b>\n");
+        sb.append(signal.getStrategy()).append(" • ").append(signal.getEventType());
+        if (ctx != null) {
+            sb.append(" • ").append(ctx.getSession());
         }
-        return text.replace("&", "&amp;")
-                   .replace("<", "&lt;")
-                   .replace(">", "&gt;");
+        sb.append("\n\n");
+        
+        // Rejection Reason
+        sb.append("<b>❌ REASON</b>\n");
+        sb.append(signal.getAction()).append("\n\n");
+        
+        // Quality Info
+        if (ai != null) {
+            sb.append("<b>📊 DETAILS</b>\n");
+            sb.append("Quality: <b>").append(ai.getSetupQuality()).append("</b>\n");
+            if (signal.getIntradayContext() != null) {
+                sb.append("Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100\n");
+            }
+            if (ctx != null) {
+                if (ctx.getOiChangePercent() != null) {
+                    sb.append("OI: ").append(formatOiChange(ctx.getOiChangePercent())).append("\n");
+                }
+                if (ctx.getFundingRate() != null) {
+                    sb.append("Funding: ").append(formatFunding(ctx.getFundingRate())).append("\n");
+                }
+            }
+            if (ai.getRiskFactors() != null && !ai.getRiskFactors().isEmpty()) {
+                sb.append("\n<b>Risk Factors:</b>\n");
+                for (int i = 0; i < Math.min(3, ai.getRiskFactors().size()); i++) {
+                    sb.append("• ").append(ai.getRiskFactors().get(i)).append("\n");
+                }
+            }
+        }
+        sb.append("\n");
+        
+        // Blockers
+        if (signal.getExecutionChecklist() != null) {
+            final var blockers = signal.getExecutionChecklist().getBlockers();
+            if (blockers != null && !blockers.isEmpty()) {
+                sb.append("<b>🚫 BLOCKERS</b>\n");
+                for (final var blocker : blockers) {
+                    sb.append("• ").append(blocker).append("\n");
+                }
+                sb.append("\n");
+            }
+        }
+        
+        sb.append("<b>⛔ ACTION: DO NOT TRADE</b>\n");
+        
+        return sb.toString();
+    }
+    
+    // Helper methods for formatting
+    
+    private String getQualityEmoji(final AiAssessment ai) {
+        if (ai == null) return "❓";
+        return switch (ai.getSetupQuality()) {
+            case "A" -> "🟢 A";
+            case "B" -> "🟡 B";
+            case "C" -> "🔴 C";
+            default -> "❓";
+        };
+    }
+    
+    private double calculateRiskPercent(final BigDecimal currentPrice, final BigDecimal stopPrice) {
+        if (currentPrice == null || stopPrice == null) return 0.0;
+        return Math.abs(currentPrice.subtract(stopPrice)
+                .divide(currentPrice, 4, java.math.RoundingMode.HALF_UP)
+                .doubleValue() * 100);
+    }
+    
+    private String formatTrends(final IntradayContext intraday) {
+        final var t15 = formatTrend(intraday.getTrendBias15m());
+        final var t5 = formatTrend(intraday.getTrendBias5m());
+        final var t1 = formatTrend(intraday.getTrendBias1m());
+        return t15 + "/" + t5 + "/" + t1 + " (15m/5m/1m)";
+    }
+    
+    private String formatTrend(final String trend) {
+        if (trend == null) return "?";
+        return switch (trend.toLowerCase()) {
+            case "bullish" -> "🟢";
+            case "bearish" -> "🔴";
+            case "neutral" -> "⚪";
+            default -> "?";
+        };
+    }
+    
+    private String formatOiBehavior(final String behavior) {
+        if (behavior == null) return "Unknown";
+        return switch (behavior.toLowerCase()) {
+            case "long_buildup" -> "Long Buildup 📈";
+            case "short_buildup" -> "Short Buildup 📉";
+            case "long_squeeze" -> "Long Squeeze 💥";
+            case "short_squeeze" -> "Short Squeeze 🚀";
+            default -> behavior.replace("_", " ");
+        };
+    }
+    
+    private String formatOiChange(final Double oiChange) {
+        if (oiChange == null) return "N/A";
+        final var formatted = String.format("%+.1f%%", oiChange);
+        if (oiChange > 5.0) return formatted + " 🔥";
+        if (oiChange < -5.0) return formatted + " ❄️";
+        return formatted;
+    }
+    
+    private String formatFunding(final Double funding) {
+        if (funding == null) return "N/A";
+        final var percent = funding * 100;
+        final var formatted = String.format("%+.4f%%", percent);
+        if (Math.abs(percent) > 0.1) return formatted + " ⚠️";
+        return formatted;
     }
 
     private void sendMessage(final String text) {

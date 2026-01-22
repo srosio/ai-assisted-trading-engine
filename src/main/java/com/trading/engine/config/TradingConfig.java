@@ -12,15 +12,7 @@ import java.math.BigDecimal;
 public class TradingConfig {
 
     // Risk Management
-    private BigDecimal minRiskPercent = new BigDecimal("0.5");
-    private BigDecimal maxRiskPercent = new BigDecimal("1.0");
-    private BigDecimal defaultRiskPercent = new BigDecimal("1.0");
-
     private BigDecimal minRiskRewardRatio = new BigDecimal("3.0");
-    private BigDecimal maxDailyLossR = new BigDecimal("2.0"); // Max 2R loss per day
-
-    // Account
-    private BigDecimal accountBalance = new BigDecimal("10000"); // Default, should be configured
 
     // Session Rules
     private boolean londonSessionEnabled = true;

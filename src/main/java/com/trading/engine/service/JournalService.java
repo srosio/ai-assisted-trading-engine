@@ -2,20 +2,14 @@ package com.trading.engine.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.trading.engine.config.TradingConfig;
 import com.trading.engine.domain.JournalEntry;
 import com.trading.engine.domain.TradeSignal;
 import com.trading.engine.repository.JournalEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-// import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +17,8 @@ import java.util.Objects;
 public class JournalService {
 
     private final JournalEntryRepository journalRepository;
-    private final TradingConfig tradingConfig;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    // @Transactional // DynamoDB transactions are different, disabling for now
     public void createEntry(final TradeSignal signal) {
         log.info("Creating journal entry for signal: {}", signal.getSignalId());
 
@@ -63,40 +55,6 @@ public class JournalService {
             log.error("Error creating journal entry: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to create journal entry", e);
         }
-    }
-
-    public long getTodayTradeCount() {
-        final var startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-        // Simple scan filter (optimize with GSI later)
-        return journalRepository.findAll().stream()
-                .filter(e -> e.getCreatedAt() != null && e.getCreatedAt().isAfter(startOfDay))
-                .count();
-    }
-
-    public BigDecimal getTodayPnL() {
-        final var startOfDay = LocalDateTime.now().with(LocalTime.MIN);
-
-        return journalRepository.findAll().stream()
-                .filter(e -> e.getCreatedAt() != null && e.getCreatedAt().isAfter(startOfDay))
-                .filter(e -> Boolean.TRUE.equals(e.getTradeTaken()))
-                .map(JournalEntry::getPnl)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    public boolean isDailyLossWithinLimit() {
-        final var todayPnL = getTodayPnL();
-        final var accountBalance = tradingConfig.getAccountBalance();
-        final var riskPercent = tradingConfig.getDefaultRiskPercent();
-        final var riskAmount = accountBalance
-                .multiply(riskPercent)
-                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
-
-        final var maxLoss = tradingConfig.getMaxDailyLossR()
-                .multiply(riskAmount)
-                .negate();
-
-        return todayPnL.compareTo(maxLoss) >= 0;
     }
 
 }

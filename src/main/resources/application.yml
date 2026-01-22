@@ -72,11 +72,7 @@ telegram:
 # Trading Rules (NON-NEGOTIABLE)
 trading:
   # Risk Management
-  min-risk-percent: 0.5
-  max-risk-percent: 1.0
-  default-risk-percent: 1.0
   min-risk-reward-ratio: 3.0
-  max-daily-loss-r: 2.0
 
   # Session Rules
   london-session-enabled: true

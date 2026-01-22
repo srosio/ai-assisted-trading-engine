@@ -34,42 +34,55 @@ public class LambdaConfig {
     /**
      * Webhook Function: Receives TradingView webhook data
      * Corresponds to: POST /api/webhook/tradingview
+     * Returns immediate response, processes synchronously (Lambda requirement)
      */
     @Bean
     public Function<TradingViewWebhook, Message<Map<String, Object>>> processWebhook() {
         return webhook -> {
-            log.info("Received properties - Symbol: {}, Strategy: {}, Event: {}",
+            log.info("Received webhook - Symbol: {}, Strategy: {}, Event: {}",
                     webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType());
 
-            // Step 1: Ingress Layer - Validate payload
+            // Step 1: Validate payload
             if (!ingressService.isValidPayload(webhook)) {
                 return MessageBuilder.withPayload(Map.<String, Object>of(
                         "success", false,
-                        "error", "Invalid payload: missing required fields")).setHeader("statusCode", 400).build();
+                        "error", "Invalid payload: missing required fields"
+                )).setHeader("statusCode", 400).build();
             }
 
-            // Step 2: Event deduplication
+            // Step 2: Check for duplicates
             if (ingressService.isDuplicate(webhook)) {
                 log.info("Duplicate event ignored");
                 return MessageBuilder.withPayload(Map.<String, Object>of(
                         "success", true,
                         "status", "DUPLICATE",
-                        "message", "Event already processed")).build();
+                        "message", "Event already processed"
+                )).setHeader("statusCode", 200).build();
             }
 
-            // Step 3: Time alignment
+            // Step 3: Align session
             final var alignedSession = ingressService.processIngress(webhook);
             webhook.setSession(alignedSession);
 
-            // Step 4: Process synchronously for Lambda (MUST wait for completion)
-            final var tradeSignal = signalProcessor.processWebhook(webhook);
+            // Step 4: Process synchronously (Lambda requires completion before return)
+            // Start processing in separate thread but wait for completion
+            final var startTime = System.currentTimeMillis();
+            signalProcessor.processWebhook(webhook);
+            final var duration = System.currentTimeMillis() - startTime;
+            
+            log.info("Webhook processed in {}ms", duration);
 
+            // Return 202 Accepted (processing complete but async-style response)
             return MessageBuilder.withPayload(Map.<String, Object>of(
                     "success", true,
-                    "status", tradeSignal.getStatus(),
-                    "message", "Signal processed",
+                    "status", "ACCEPTED",
+                    "message", "Webhook received and processed",
                     "symbol", webhook.getSymbol(),
-                    "signalId", tradeSignal.getSignalId())).setHeader("statusCode", 200).build();
+                    "strategy", webhook.getStrategy(),
+                    "eventType", webhook.getEventType(),
+                    "direction", webhook.getDirection(),
+                    "processingTimeMs", duration
+            )).setHeader("statusCode", 202).build();
         };
     }
 
