@@ -9,7 +9,6 @@ spring:
   cloud:
     function:
       definition: processWebhook;getJournalEntries;getStatistics
-      routing-expression: "headers['routeKey'] == 'POST /api/webhook/tradingview' ? 'processWebhook' : headers['routeKey'] == 'GET /api/journal/statistics' ? 'getStatistics' : headers['routeKey'] == 'GET /api/journal' ? 'getJournalEntries' : 'processWebhook'"
 
 dynamodb:
   table-name: ${DYNAMODB_TABLE:journal_entries}

@@ -50,12 +50,14 @@ dependencies {
     implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
     implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
 
-    // AWS DynamoDB SDK v2 - Exclude unused modules
+    // AWS DynamoDB SDK v2 - Exclude unused modules and Apache HTTP client
     implementation('software.amazon.awssdk:dynamodb') {
         exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+        exclude group: 'software.amazon.awssdk', module: 'apache-client'
     }
     implementation('software.amazon.awssdk:dynamodb-enhanced') {
         exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+        exclude group: 'software.amazon.awssdk', module: 'apache-client'
     }
     implementation 'software.amazon.awssdk:url-connection-client'
 

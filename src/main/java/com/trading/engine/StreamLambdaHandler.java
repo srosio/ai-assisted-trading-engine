@@ -48,18 +48,22 @@ public class StreamLambdaHandler implements RequestStreamHandler {
                 if (routeKey != null) {
                     log.info("API Gateway v2.0 event detected. RouteKey: {}", routeKey);
 
-                    // Add routeKey to headers for Spring Cloud Function routing
+                    // Determine function name based on routeKey
+                    String functionName = determineFunctionName(routeKey);
+                    log.info("Mapped routeKey '{}' to function '{}'", routeKey, functionName);
+
+                    // Set spring.cloud.function.definition header to directly specify the function
                     if (eventNode.has("headers")) {
-                        ((ObjectNode) eventNode.get("headers")).put("routeKey", routeKey);
+                        ((ObjectNode) eventNode.get("headers")).put("spring.cloud.function.definition", functionName);
                     } else {
                         ObjectNode headers = objectMapper.createObjectNode();
-                        headers.put("routeKey", routeKey);
+                        headers.put("spring.cloud.function.definition", functionName);
                         ((ObjectNode) eventNode).set("headers", headers);
                     }
 
                     // Convert back to input stream with modified event
                     inputBytes = objectMapper.writeValueAsBytes(eventNode);
-                    log.debug("Enhanced event with routeKey header");
+                    log.debug("Enhanced event with function definition header");
                 }
             }
         } catch (Exception e) {
@@ -68,5 +72,24 @@ public class StreamLambdaHandler implements RequestStreamHandler {
 
         // Pass to FunctionInvoker with potentially modified input
         invoker.handleRequest(new ByteArrayInputStream(inputBytes), output, context);
+    }
+
+    /**
+     * Maps API Gateway routeKey to Spring Cloud Function name
+     */
+    private String determineFunctionName(String routeKey) {
+        if (routeKey == null) {
+            return "processWebhook"; // default
+        }
+
+        return switch (routeKey) {
+            case "POST /api/webhook/tradingview" -> "processWebhook";
+            case "GET /api/journal/statistics" -> "getStatistics";
+            case "GET /api/journal" -> "getJournalEntries";
+            default -> {
+                log.warn("Unknown routeKey: {}. Defaulting to processWebhook", routeKey);
+                yield "processWebhook";
+            }
+        };
     }
 }
