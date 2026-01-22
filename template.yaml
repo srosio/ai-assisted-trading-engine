@@ -77,6 +77,7 @@ Resources:
   TradingEngineFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: ai-trading-engine
       CodeUri: build/libs/ai-assisted-trading-engine-1.0.0.jar
       Handler: com.trading.engine.StreamLambdaHandler
       SnapStart:
@@ -110,7 +111,7 @@ Resources:
   TradingEngineFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${TradingEngineFunction}
+      LogGroupName: /aws/lambda/ai-trading-engine
       RetentionInDays: 7  # Keep logs for 7 days only (can increase to 30, 60, 90, etc.)
 
   # CloudWatch Alarms for monitoring free tier usage
@@ -128,7 +129,7 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
         - Name: FunctionName
-          Value: !Ref TradingEngineFunction
+          Value: ai-trading-engine
       TreatMissingData: notBreaching
 
   LambdaComputeAlarm:
@@ -145,7 +146,7 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
         - Name: FunctionName
-          Value: !Ref TradingEngineFunction
+          Value: ai-trading-engine
       TreatMissingData: notBreaching
 
 Outputs:
