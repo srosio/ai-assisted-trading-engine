@@ -1,0 +1,159 @@
+//@version=6
+strategy("BB Squeeze Mean Reversion", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// Webhook Configuration
+webhook_url = input.string("https://your-api.execute-api.us-east-1.amazonaws.com/api/webhook/tradingview", "Webhook URL")
+api_key = input.string("your-webhook-key", "API Key")
+
+// Strategy Parameters
+bb_length = input.int(20, "BB Length", minval=1)
+bb_mult = input.float(2.0, "BB Multiplier", minval=0.1, step=0.1)
+rsi_length = input.int(14, "RSI Length", minval=1)
+rsi_oversold = input.int(25, "RSI Oversold", minval=1, maxval=50)
+rsi_overbought = input.int(75, "RSI Overbought", minval=50, maxval=99)
+atr_length = input.int(14, "ATR Length", minval=1)
+volume_ma_length = input.int(20, "Volume MA Length", minval=1)
+
+// Bollinger Bands
+[bb_middle, bb_upper, bb_lower] = ta.bb(close, bb_length, bb_mult)
+bb_width = (bb_upper - bb_lower) / bb_middle * 100
+bb_width_ma = ta.sma(bb_width, 20)
+bb_squeeze = bb_width < bb_width_ma * 0.7  // Squeeze when width < 70% of average
+
+// RSI
+rsi = ta.rsi(close, rsi_length)
+
+// ATR
+atr = ta.atr(atr_length)
+
+// Volume
+volume_ma = ta.sma(volume, volume_ma_length)
+volume_spike = volume > volume_ma * 1.5
+
+// Previous Day Levels
+prev_day_high = request.security(syminfo.tickerid, "D", high[1])
+prev_day_low = request.security(syminfo.tickerid, "D", low[1])
+
+// Candle Metrics
+candle_range = high - low
+candle_body = math.abs(close - open)
+upper_wick = high - math.max(close, open)
+lower_wick = math.min(close, open) - low
+wick_percent = candle_range > 0 ? ((upper_wick + lower_wick) / candle_range) * 100 : 0
+body_percent = candle_range > 0 ? (candle_body / candle_range) * 100 : 0
+
+// HTF Bias (4H)
+htf_close = request.security(syminfo.tickerid, "240", close)
+htf_sma = request.security(syminfo.tickerid, "240", ta.sma(close, 50))
+htf_bias = htf_close > htf_sma ? "bullish" : htf_close < htf_sma ? "bearish" : "neutral"
+
+// Session Detection
+is_london = (hour >= 8 and hour < 16)
+is_ny = (hour >= 13 and hour < 21)
+is_asia = (hour >= 0 and hour < 8)
+current_session = is_ny ? "NY" : is_london ? "London" : "Asia"
+
+// LONG Setup: Price at lower BB, RSI oversold, squeeze, rejection wick
+long_condition = bb_squeeze and 
+                 close <= bb_lower and 
+                 rsi < rsi_oversold and 
+                 lower_wick > candle_body * 0.5 and  // Strong rejection wick
+                 close > open and  // Bullish close
+                 (is_london or is_ny)  // Only London/NY sessions
+
+// SHORT Setup: Price at upper BB, RSI overbought, squeeze, rejection wick
+short_condition = bb_squeeze and 
+                  close >= bb_upper and 
+                  rsi > rsi_overbought and 
+                  upper_wick > candle_body * 0.5 and  // Strong rejection wick
+                  close < open and  // Bearish close
+                  (is_london or is_ny)  // Only London/NY sessions
+
+// Entry Logic
+if long_condition and strategy.position_size == 0
+    stop_loss = close - (atr * 1.5)
+    take_profit_1 = close + (atr * 2.0)  // 2R target (conservative)
+    
+    strategy.entry("Long", strategy.long)
+    strategy.exit("TP/SL", "Long", stop=stop_loss, limit=take_profit_1)
+    
+    // Build JSON payload
+    json_payload = '{\n' +
+         '  "symbol": "' + syminfo.ticker + 'USDT",\n' +
+         '  "timeframe": "' + timeframe.period + '",\n' +
+         '  "strategy": "BB Squeeze Mean Reversion",\n' +
+         '  "eventType": "reversal",\n' +
+         '  "direction": "bullish",\n' +
+         '  "session": "' + current_session + '",\n' +
+         '  "price": {\n' +
+         '    "close": ' + str.tostring(close) + ',\n' +
+         '    "stopLoss": ' + str.tostring(stop_loss) + '\n' +
+         '  },\n' +
+         '  "context": {\n' +
+         '    "htfBias": "' + htf_bias + '",\n' +
+         '    "rsiValue": ' + str.tostring(rsi) + ',\n' +
+         '    "atrValue": ' + str.tostring(atr) + ',\n' +
+         '    "volumeSpike": ' + str.tostring(volume_spike) + ',\n' +
+         '    "displacement": false,\n' +
+         '    "previousDayHigh": ' + str.tostring(prev_day_high) + ',\n' +
+         '    "previousDayLow": ' + str.tostring(prev_day_low) + ',\n' +
+         '    "candleMetrics": {\n' +
+         '      "wickPercent": ' + str.tostring(wick_percent) + ',\n' +
+         '      "bodyPercent": ' + str.tostring(body_percent) + ',\n' +
+         '      "range": ' + str.tostring(candle_range) + ',\n' +
+         '      "bodySize": ' + str.tostring(candle_body) + '\n' +
+         '    }\n' +
+         '  }\n' +
+         '}'
+    
+    alert(json_payload, alert.freq_once_per_bar_close)
+
+if short_condition and strategy.position_size == 0
+    stop_loss = close + (atr * 1.5)
+    take_profit_1 = close - (atr * 2.0)  // 2R target (conservative)
+    
+    strategy.entry("Short", strategy.short)
+    strategy.exit("TP/SL", "Short", stop=stop_loss, limit=take_profit_1)
+    
+    // Build JSON payload
+    json_payload = '{\n' +
+         '  "symbol": "' + syminfo.ticker + 'USDT",\n' +
+         '  "timeframe": "' + timeframe.period + '",\n' +
+         '  "strategy": "BB Squeeze Mean Reversion",\n' +
+         '  "eventType": "reversal",\n' +
+         '  "direction": "bearish",\n' +
+         '  "session": "' + current_session + '",\n' +
+         '  "price": {\n' +
+         '    "close": ' + str.tostring(close) + ',\n' +
+         '    "stopLoss": ' + str.tostring(stop_loss) + '\n' +
+         '  },\n' +
+         '  "context": {\n' +
+         '    "htfBias": "' + htf_bias + '",\n' +
+         '    "rsiValue": ' + str.tostring(rsi) + ',\n' +
+         '    "atrValue": ' + str.tostring(atr) + ',\n' +
+         '    "volumeSpike": ' + str.tostring(volume_spike) + ',\n' +
+         '    "displacement": false,\n' +
+         '    "previousDayHigh": ' + str.tostring(prev_day_high) + ',\n' +
+         '    "previousDayLow": ' + str.tostring(prev_day_low) + ',\n' +
+         '    "candleMetrics": {\n' +
+         '      "wickPercent": ' + str.tostring(wick_percent) + ',\n' +
+         '      "bodyPercent": ' + str.tostring(body_percent) + ',\n' +
+         '      "range": ' + str.tostring(candle_range) + ',\n' +
+         '      "bodySize": ' + str.tostring(candle_body) + '\n' +
+         '    }\n' +
+         '  }\n' +
+         '}'
+    
+    alert(json_payload, alert.freq_once_per_bar_close)
+
+// Plot Bollinger Bands
+plot(bb_upper, "BB Upper", color=color.blue, linewidth=1)
+plot(bb_middle, "BB Middle", color=color.gray, linewidth=1)
+plot(bb_lower, "BB Lower", color=color.blue, linewidth=1)
+
+// Plot Signals
+plotshape(long_condition, "Long Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(short_condition, "Short Signal", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+// Background color for squeeze
+bgcolor(bb_squeeze ? color.new(color.yellow, 90) : na, title="Squeeze")

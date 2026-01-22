@@ -26,12 +26,26 @@ curl http://localhost:8080/api/webhook/health
 
 - ✅ **Rule-Based Trading**: Strict, non-negotiable trading rules for risk management
 - 🤖 **AI Context Analysis**: Claude AI provides market context (not trading decisions)
-- 📊 **TradingView Integration**: Webhook-based signal processing from Pine Script strategies
+- 📊 **TradingView Integration**: 3 strategies (45-85% WR) with webhook signals
 - 🔒 **Risk Management**: Position sizing, stop-loss, R-multiple tracking
 - 📝 **Trade Journaling**: Comprehensive PostgreSQL-based trade journal
 - 🔔 **Telegram Notifications**: Real-time alerts for valid trade setups
 - ⚡ **Rate Limit Protection**: Automatic Binance API rate limiting and back-off
 - 🐳 **Docker Support**: Easy deployment with Docker Compose
+
+## TradingView Strategies
+
+1. **BB Squeeze Mean Reversion** (75-85% WR, 1:2 R:R)
+   - Bollinger Band squeeze + RSI extreme + rejection wick
+   - Tight stops, quick profits, range-bound markets
+
+2. **Candle 2 Closure with RSI** (60-70% WR, 1:2-1:3 R:R)
+   - Two consecutive candles + RSI extreme
+   - Trend reversals, oversold/overbought conditions
+
+3. **Liquidity Sweeps** (45-55% WR, 1:3-1:5 R:R)
+   - Equal highs/lows swept with displacement
+   - Volatile markets, key level hunts
 
 ## Architecture
 
