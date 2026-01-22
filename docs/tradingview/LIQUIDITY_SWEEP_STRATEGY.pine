@@ -49,12 +49,16 @@ if not na(lineLow)
 atr = ta.atr(14)
 volSMA = ta.sma(volume, 20)
 volumeSpike = volume > volSMA * volMultiplier
+rsiValue = ta.rsi(close, 14)
 
-// 3. HTF Bias
+// 3. Previous Day Levels
+[prevDayHigh, prevDayLow] = request.security(syminfo.tickerid, "D", [high[1], low[1]])
+
+// 4. HTF Bias
 [htf_ema_20, htf_ema_50] = request.security(syminfo.tickerid, htfSelection, [ta.ema(close, 20), ta.ema(close, 50)])
 htfBias = htf_ema_20 > htf_ema_50 ? "bullish" : htf_ema_20 < htf_ema_50 ? "bearish" : "neutral"
 
-// 4. Session Logic (NY time)
+// 5. Session Logic (NY time)
 currentHour = hour(time, "America/New_York")
 is_london = currentHour >= 3 and currentHour < 8
 is_ny     = currentHour >= 8 and currentHour < 16
@@ -84,6 +88,13 @@ if shortSetup
     sweptLevel_H := lastPivotHigh
 if longSetup
     sweptLevel_L := lastPivotLow
+
+// Calculate candle metrics
+candleRange = high - low
+candleBody = math.abs(close - open)
+wickSize = close > open ? (high - close) + (open - low) : (high - open) + (close - low)
+wickPercent = candleRange > 0 ? (wickSize / candleRange) * 100 : 0
+bodyPercent = candleRange > 0 ? (candleBody / candleRange) * 100 : 0
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLOTTING
@@ -121,7 +132,18 @@ alert_json_universal(string direction, float close_price, float sl_price, string
       '"context": {' +
           '"sweptLevel": ' + (na(swept_level) ? "null" : str.tostring(swept_level)) + ', ' +
           '"htfBias": "' + htf + '", ' +
-          '"displacement": true' +
+          '"displacement": true, ' +
+          '"volumeSpike": ' + str.tostring(volumeSpike) + ', ' +
+          '"rsiValue": ' + str.tostring(rsiValue) + ', ' +
+          '"atrValue": ' + str.tostring(atr) + ', ' +
+          '"previousDayHigh": ' + str.tostring(prevDayHigh) + ', ' +
+          '"previousDayLow": ' + str.tostring(prevDayLow) + ', ' +
+          '"candleMetrics": {' +
+              '"wickPercent": ' + str.tostring(wickPercent) + ', ' +
+              '"bodyPercent": ' + str.tostring(bodyPercent) + ', ' +
+              '"range": ' + str.tostring(candleRange) + ', ' +
+              '"bodySize": ' + str.tostring(candleBody) +
+          '}' +
       '}, ' +
       '"timestamp": "' + time_iso + '"' +
       '}'

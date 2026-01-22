@@ -60,7 +60,7 @@ public class JournalEntryResponse {
     public static JournalEntryResponse fromEntity(JournalEntry entry) {
         final var response = new JournalEntryResponse();
 
-        response.setId(entry.getId());
+        // response.setId(entry.getId()); // Removed in DynamoDB migration
         response.setSignalId(entry.getSignalId());
         response.setSymbol(entry.getSymbol());
         response.setDirection(entry.getDirection());

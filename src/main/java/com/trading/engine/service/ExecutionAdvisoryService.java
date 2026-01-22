@@ -12,15 +12,6 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Execution Advisory Layer
- *
- * Provides pre-execution checklist:
- * - Spread OK
- * - Funding acceptable
- * - Volatility within bounds
- * - Liquidity adequate
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,15 +19,11 @@ public class ExecutionAdvisoryService {
 
     private final MarketDataService marketData;
 
-    // Thresholds
-    private static final double MAX_SPREAD_BPS = 5.0; // 5 basis points
-    private static final double MAX_FUNDING_RATE = 0.01; // 1%
+    private static final double MAX_SPREAD_BPS = 5.0;
+    private static final double MAX_FUNDING_RATE = 0.01;
     private static final double MIN_ORDER_BOOK_RATIO = 0.7;
     private static final double MAX_ORDER_BOOK_RATIO = 1.3;
 
-    /**
-     * Generate pre-execution checklist
-     */
     public ExecutionChecklist generateChecklist(final String symbol,
                                                  final MarketContext marketContext,
                                                  final IntradayContext intradayContext) {
@@ -45,31 +32,20 @@ public class ExecutionAdvisoryService {
         final var warnings = new ArrayList<String>();
         final var blockers = new ArrayList<String>();
 
-        // Check 1: Spread
         final var spreadCheck = checkSpread(symbol, marketContext.getCurrentPrice(), warnings, blockers);
-
-        // Check 2: Funding rate
         final var fundingCheck = checkFunding(
                 marketContext.getFundingRate(),
                 intradayContext.getFundingRateDelta(),
                 warnings,
                 blockers
         );
-
-        // Check 3: Volatility
         final var volatilityCheck = checkVolatility(marketContext.getVolatility(), warnings);
-
-        // Check 4: Liquidity (order book)
         final var liquidityCheck = checkLiquidity(
                 intradayContext.getOrderBookImbalance(),
                 warnings,
                 blockers
         );
-
-        // Overall readiness
         final var ready = blockers.isEmpty();
-
-        // Generate summary
         final var summary = generateSummary(ready, warnings.size(), blockers.size());
 
         return ExecutionChecklist.builder()
@@ -89,22 +65,15 @@ public class ExecutionAdvisoryService {
                 .build();
     }
 
-    /**
-     * Check spread (bid-ask)
-     */
     private SpreadResult checkSpread(final String symbol,
                                       final BigDecimal currentPrice,
                                       final List<String> warnings,
                                       final List<String> blockers) {
         try {
-            // Get order book to calculate spread
             final var orderBookImbalance = marketData.getOrderBookImbalance(symbol);
-
-            // Approximate spread as 0.02% for liquid pairs, 0.05% for less liquid
-            // Real implementation would parse actual bid/ask from depth
             final var spreadBps = orderBookImbalance != null && Math.abs(orderBookImbalance - 1.0) < 0.2
-                    ? 2.0  // Tight spread
-                    : 5.0; // Wider spread
+                    ? 2.0
+                    : 5.0;
 
             if (spreadBps > MAX_SPREAD_BPS) {
                 blockers.add(String.format("Spread too wide: %.2f bps (max %.0f bps)", spreadBps, MAX_SPREAD_BPS));
@@ -118,13 +87,10 @@ public class ExecutionAdvisoryService {
         } catch (final Exception e) {
             log.error("Error checking spread: {}", e.getMessage());
             warnings.add("Could not verify spread");
-            return new SpreadResult(true, 0.0); // Optimistic default
+            return new SpreadResult(true, 0.0);
         }
     }
 
-    /**
-     * Check funding rate
-     */
     private FundingResult checkFunding(final Double fundingRate,
                                         final Double fundingDelta,
                                         final List<String> warnings,
@@ -135,14 +101,12 @@ public class ExecutionAdvisoryService {
 
         String warning = null;
 
-        // Check if funding is extreme
         if (Math.abs(fundingRate) > MAX_FUNDING_RATE) {
             warning = String.format("Extreme funding: %.4f%% (consider cost)", fundingRate * 100);
             blockers.add(warning);
             return new FundingResult(false, fundingRate, warning);
         }
 
-        // Check if funding is trending in unfavorable direction
         if (fundingDelta != null && Math.abs(fundingDelta) > 0.0005) {
             warning = String.format("Funding changing rapidly: %.5f delta", fundingDelta);
             warnings.add(warning);
@@ -156,9 +120,6 @@ public class ExecutionAdvisoryService {
         return new FundingResult(true, fundingRate, warning);
     }
 
-    /**
-     * Check volatility
-     */
     private VolatilityResult checkVolatility(final String volatility,
                                               final List<String> warnings) {
         if ("expanding".equals(volatility)) {
@@ -169,9 +130,6 @@ public class ExecutionAdvisoryService {
         return new VolatilityResult(true, volatility);
     }
 
-    /**
-     * Check liquidity (order book balance)
-     */
     private LiquidityResult checkLiquidity(final Double orderBookImbalance,
                                             final List<String> warnings,
                                             final List<String> blockers) {
@@ -179,14 +137,12 @@ public class ExecutionAdvisoryService {
             return new LiquidityResult(true, 1.0);
         }
 
-        // Check if order book is extremely imbalanced
         if (orderBookImbalance < MIN_ORDER_BOOK_RATIO) {
             warnings.add(String.format("Order book skewed to sell side: %.2f", orderBookImbalance));
         } else if (orderBookImbalance > MAX_ORDER_BOOK_RATIO) {
             warnings.add(String.format("Order book skewed to buy side: %.2f", orderBookImbalance));
         }
 
-        // Extreme imbalances might indicate low liquidity
         if (orderBookImbalance < 0.5 || orderBookImbalance > 2.0) {
             blockers.add(String.format("Extreme order book imbalance: %.2f (low liquidity)", orderBookImbalance));
             return new LiquidityResult(false, orderBookImbalance);
@@ -195,9 +151,6 @@ public class ExecutionAdvisoryService {
         return new LiquidityResult(true, orderBookImbalance);
     }
 
-    /**
-     * Generate checklist summary
-     */
     private String generateSummary(final boolean ready, final int warningCount, final int blockerCount) {
         if (ready && warningCount == 0) {
             return "All checks passed - Ready for execution";
@@ -208,7 +161,6 @@ public class ExecutionAdvisoryService {
         }
     }
 
-    // Helper classes for results
     private record SpreadResult(boolean ok, double spreadBps) {}
     private record FundingResult(boolean ok, double rate, String warning) {}
     private record VolatilityResult(boolean ok, String state) {}

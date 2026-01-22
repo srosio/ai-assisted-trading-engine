@@ -5,6 +5,7 @@ import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.anthropic.api.AnthropicApi;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -39,11 +40,32 @@ public class SpringAiConfig {
                 .withTemperature(claudeConfig.getTemperature())
                 .build();
 
+        log.info("Configured Sonnet model: {}", claudeConfig.getModel());
+        return new AnthropicChatModel(anthropicApi, options);
+    }
+
+    @Bean("haikuChatModel")
+    public AnthropicChatModel haikuChatModel(
+            final AnthropicApi anthropicApi,
+            final ClaudeConfig claudeConfig) {
+
+        final var options = AnthropicChatOptions.builder()
+                .withModel(claudeConfig.getHaikuModel())
+                .withMaxTokens(claudeConfig.getMaxTokens())
+                .withTemperature(claudeConfig.getTemperature())
+                .build();
+
+        log.info("Configured Haiku model: {} (for pre-filtering)", claudeConfig.getHaikuModel());
         return new AnthropicChatModel(anthropicApi, options);
     }
 
     @Bean
-    public ChatClient chatClient(final AnthropicChatModel chatModel) {
+    public ChatClient chatClient(@Qualifier("anthropicChatModel") final AnthropicChatModel chatModel) {
         return ChatClient.builder(chatModel).build();
+    }
+
+    @Bean("haikuChatClient")
+    public ChatClient haikuChatClient(@Qualifier("haikuChatModel") final AnthropicChatModel haikuChatModel) {
+        return ChatClient.builder(haikuChatModel).build();
     }
 }

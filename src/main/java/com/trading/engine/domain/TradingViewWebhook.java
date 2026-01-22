@@ -96,6 +96,32 @@ public class TradingViewWebhook {
 
         @JsonProperty("previousDayLow")
         private BigDecimal previousDayLow;
+
+        @JsonProperty("rsiValue")
+        private Double rsiValue;
+
+        @JsonProperty("atrValue")
+        private BigDecimal atrValue;
+
+        @JsonProperty("candleMetrics")
+        private CandleMetrics candleMetrics;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CandleMetrics {
+        @JsonProperty("wickPercent")
+        private Double wickPercent;
+
+        @JsonProperty("bodyPercent")
+        private Double bodyPercent;
+
+        private BigDecimal range;
+
+        @JsonProperty("bodySize")
+        private BigDecimal bodySize;
     }
 
     // === Convenience Getters ===
@@ -130,6 +156,18 @@ public class TradingViewWebhook {
 
     public BigDecimal getPreviousDayLow() {
         return context != null ? context.getPreviousDayLow() : null;
+    }
+
+    public Double getRsiValue() {
+        return context != null ? context.getRsiValue() : null;
+    }
+
+    public BigDecimal getAtrValue() {
+        return context != null ? context.getAtrValue() : null;
+    }
+
+    public CandleMetrics getCandleMetrics() {
+        return context != null ? context.getCandleMetrics() : null;
     }
 
     public void ensureTimestamp() {

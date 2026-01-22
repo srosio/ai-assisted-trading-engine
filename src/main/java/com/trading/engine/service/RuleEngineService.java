@@ -8,16 +8,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.List;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class RuleEngineService {
 
     private final TradingConfig tradingConfig;
-    private final JournalService journalService;
 
     public RuleResult validateSetup(final MarketContext context, final AiAssessment aiAssessment) {
         log.info("Validating setup for {} - Quality: {}", context.getSymbol(), aiAssessment.getSetupQuality());
@@ -31,8 +27,6 @@ public class RuleEngineService {
         validateHtfAlignment(context, result);
 
         validateSession(context.getSession(), result);
-
-        validateDailyLoss(result);
 
         validateOpenInterest(context.getOiChangePercent(), result);
 
@@ -109,16 +103,6 @@ public class RuleEngineService {
         }
     }
 
-    private void validateDailyLoss(final RuleResult result) {
-        final var withinLimit = journalService.isDailyLossWithinLimit();
-
-        if (withinLimit) {
-            result.addPassedRule("Daily loss within limit");
-        } else {
-            result.addFailedRule("Daily loss limit exceeded (-" + tradingConfig.getMaxDailyLossR() + "R)");
-        }
-    }
-
     private void validateOpenInterest(final Double oiChange, final RuleResult result) {
         if (oiChange == null) {
             result.addFailedRule("Open Interest data unavailable");
@@ -157,16 +141,4 @@ public class RuleEngineService {
         }
     }
 
-    public boolean quickValidation(final String session) {
-        final var sessionOk = switch (session.toUpperCase()) {
-            case "LONDON" -> tradingConfig.isLondonSessionEnabled();
-            case "NY", "NEW_YORK" -> tradingConfig.isNySessionEnabled();
-            case "ASIA" -> tradingConfig.isAsiaSessionEnabled();
-            default -> false;
-        };
-
-        final var lossOk = journalService.isDailyLossWithinLimit();
-
-        return sessionOk && lossOk;
-    }
 }
