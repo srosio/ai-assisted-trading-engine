@@ -17,6 +17,8 @@ Globals:
         JAVA_TOOL_OPTIONS: "-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
         DYNAMODB_TABLE: !Ref JournalTable
         DYNAMODB_CACHE_TABLE: !Ref AiCacheTable
+        SPRING_CLOUD_FUNCTION_DEFINITION: processWebhook;getJournalEntries;getStatistics
+        SPRING_CLOUD_FUNCTION_ROUTING_EXPRESSION: "headers['routeKey'] == 'POST /api/webhook' ? 'processWebhook' : headers['routeKey'] == 'GET /api/journal/statistics' ? 'getStatistics' : headers['routeKey'] == 'GET /api/journal' ? 'getJournalEntries' : 'processWebhook'"
     # Limit concurrent executions to prevent cost runaway (commented out for initial deployment)
     # ReservedConcurrentExecutions: 20  # Max 20 simultaneous webhook executions
 
