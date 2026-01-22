@@ -42,10 +42,13 @@ public class NotificationService extends TelegramLongPollingBot {
 
         // Header with status
         final var emoji = isValid ? "✅" : "⚠️";
-        sb.append(emoji).append(" <b>TRADE SIGNAL</b>\n\n");
+        sb.append(emoji).append(" <b>TRADE SIGNAL</b>\n");
+        sb.append("ID: ").append(escapeHtml(signal.getSignalId())).append("\n");
+        sb.append("Time: ").append(java.time.Instant.now()).append("\n\n");
 
-        // Signal basics
-        sb.append("<b>").append(escapeHtml(signal.getSymbol())).append(" ")
+        // Signal basics with $ prefix
+        final var symbolWithPrefix = "$" + signal.getSymbol().replace("USDT", "");
+        sb.append("<b>").append(escapeHtml(symbolWithPrefix)).append(" ")
                 .append(escapeHtml(signal.getDirection()));
         if (signal.getMarketContext() != null) {
             sb.append(" @ ").append(signal.getMarketContext().getCurrentPrice());
