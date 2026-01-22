@@ -17,8 +17,8 @@ Globals:
         JAVA_TOOL_OPTIONS: "-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
         DYNAMODB_TABLE: !Ref JournalTable
         DYNAMODB_CACHE_TABLE: !Ref AiCacheTable
-    # Limit concurrent executions to prevent cost runaway
-    ReservedConcurrentExecutions: 20  # Max 20 simultaneous webhook executions
+    # Limit concurrent executions to prevent cost runaway (commented out for initial deployment)
+    # ReservedConcurrentExecutions: 20  # Max 20 simultaneous webhook executions
 
 Resources:
   # DynamoDB Journal Table
@@ -78,7 +78,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: build/libs/ai-assisted-trading-engine-1.0.0.jar
-      Handler: com.trading.engine.StreamLambdaHandler::handleRequest
+      Handler: com.trading.engine.StreamLambdaHandler
       SnapStart:
         ApplyOn: PublishedVersions
       Policies:
@@ -90,12 +90,12 @@ Resources:
         ApiWebhooks:
           Type: HttpApi
           Properties:
-            Path: /api/webhook/{proxy+}
+            Path: /api/webhook
             Method: POST
         ApiJournal:
           Type: HttpApi
           Properties:
-            Path: /api/journal/{proxy+}
+            Path: /api/journal
             Method: GET
         ApiStats:
           Type: HttpApi

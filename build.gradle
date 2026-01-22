@@ -2,8 +2,10 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.2.1'
     id 'io.spring.dependency-management' version '1.1.4'
-    // id 'com.github.johnrengelman.shadow' version '8.1.1' // Optional: for building shaded jar if needed manually
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
+
+import com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer
 
 group = 'com.trading'
 version = '1.0.0'
@@ -95,6 +97,25 @@ jar {
 }
 
 bootJar {
-    // This creates the thin jar or uber jar. For Lambda, usually uber jar is fine.
-    // Spring Boot plugin's bootJar task creates an executable jar.
+    enabled = false
 }
+
+shadowJar {
+    // REQUIRED: Merges standard service files
+    mergeServiceFiles()
+
+    // REQUIRED: Prevents overwriting of Spring metadata
+    append 'META-INF/spring.handlers'
+    append 'META-INF/spring.schemas'
+    append 'META-INF/spring.tooling'
+
+    // CRITICAL FOR SPRING BOOT 3+:
+    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+
+    archiveFileName = 'ai-assisted-trading-engine-1.0.0.jar'
+    manifest {
+        attributes 'Main-Class': 'com.trading.engine.TradingEngineApplication'
+    }
+}
+
+assemble.dependsOn shadowJar

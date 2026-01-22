@@ -5,6 +5,7 @@ import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.anthropic.api.AnthropicApi;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -59,12 +60,12 @@ public class SpringAiConfig {
     }
 
     @Bean
-    public ChatClient chatClient(final AnthropicChatModel chatModel) {
+    public ChatClient chatClient(@Qualifier("anthropicChatModel") final AnthropicChatModel chatModel) {
         return ChatClient.builder(chatModel).build();
     }
 
     @Bean("haikuChatClient")
-    public ChatClient haikuChatClient(final AnthropicChatModel haikuChatModel) {
+    public ChatClient haikuChatClient(@Qualifier("haikuChatModel") final AnthropicChatModel haikuChatModel) {
         return ChatClient.builder(haikuChatModel).build();
     }
 }
