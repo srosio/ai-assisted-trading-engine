@@ -18,7 +18,7 @@ Globals:
         DYNAMODB_TABLE: !Ref JournalTable
         DYNAMODB_CACHE_TABLE: !Ref AiCacheTable
         SPRING_CLOUD_FUNCTION_DEFINITION: processWebhook;getJournalEntries;getStatistics
-        SPRING_CLOUD_FUNCTION_ROUTING_EXPRESSION: "headers['routeKey'] == 'POST /api/webhook' ? 'processWebhook' : headers['routeKey'] == 'GET /api/journal/statistics' ? 'getStatistics' : headers['routeKey'] == 'GET /api/journal' ? 'getJournalEntries' : 'processWebhook'"
+        SPRING_CLOUD_FUNCTION_ROUTING_EXPRESSION: "headers['routeKey'] == 'POST /api/webhook/tradingview' ? 'processWebhook' : headers['routeKey'] == 'GET /api/journal/statistics' ? 'getStatistics' : headers['routeKey'] == 'GET /api/journal' ? 'getJournalEntries' : 'processWebhook'"
     # Limit concurrent executions to prevent cost runaway (commented out for initial deployment)
     # ReservedConcurrentExecutions: 20  # Max 20 simultaneous webhook executions
 
@@ -92,7 +92,7 @@ Resources:
         ApiWebhooks:
           Type: HttpApi
           Properties:
-            Path: /api/webhook
+            Path: /api/webhook/tradingview
             Method: POST
         ApiJournal:
           Type: HttpApi

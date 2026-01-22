@@ -37,29 +37,36 @@ dependencies {
     // Spring Cloud Function & AWS Adapter
     implementation 'org.springframework.cloud:spring-cloud-function-adapter-aws'
 
-    // Core Spring Boot
-    implementation 'org.springframework.boot:spring-boot-starter'
+    // Core Spring Boot - Exclude unnecessary autoconfigure
+    implementation('org.springframework.boot:spring-boot-starter') {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+    }
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Minimal SLF4J logging (required by Lambda)
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
 
     // AWS Lambda Core
     implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
     implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
-    
-    // AWS DynamoDB SDK v2
-    implementation 'software.amazon.awssdk:dynamodb'
-    implementation 'software.amazon.awssdk:dynamodb-enhanced'
-    
+
+    // AWS DynamoDB SDK v2 - Exclude unused modules
+    implementation('software.amazon.awssdk:dynamodb') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
+    implementation('software.amazon.awssdk:dynamodb-enhanced') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
+    implementation 'software.amazon.awssdk:url-connection-client'
+
     // CRaC (Coordinated Restore at Checkpoint) for SnapStart
     implementation 'org.crac:crac:1.4.0'
 
-    // Spring AI
+    // Spring AI - Exclude unnecessary HTTP clients
     implementation platform('org.springframework.ai:spring-ai-bom:1.0.0-M4')
-    implementation 'org.springframework.ai:spring-ai-anthropic'
-
-    // JAXB API 
-    implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.9'
-    implementation 'javax.activation:activation:1.1.1'
+    implementation('org.springframework.ai:spring-ai-anthropic') {
+        exclude group: 'io.projectreactor.netty', module: 'reactor-netty'
+    }
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'
@@ -69,8 +76,10 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
-    // Telegram Bot API
-    implementation 'org.telegram:telegrambots:6.9.7.1'
+    // Telegram Bot API - Exclude only Grizzly HTTP server (not needed in Lambda)
+    implementation('org.telegram:telegrambots:6.9.7.1') {
+        exclude group: 'org.glassfish.jersey.containers', module: 'jersey-container-grizzly2-http'
+    }
 
     // Apache Commons Math
     implementation 'org.apache.commons:commons-math3:3.6.1'
@@ -111,6 +120,17 @@ shadowJar {
 
     // CRITICAL FOR SPRING BOOT 3+:
     append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+
+    // Exclude unnecessary files to reduce JAR size
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    exclude 'META-INF/LICENSE*'
+    exclude 'META-INF/NOTICE*'
+    exclude 'META-INF/DEPENDENCIES'
+    exclude 'about.html'
+    exclude 'META-INF/maven/**'
+    exclude 'module-info.class'
 
     archiveFileName = 'ai-assisted-trading-engine-1.0.0.jar'
     manifest {
