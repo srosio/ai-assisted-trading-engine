@@ -61,14 +61,15 @@ public class LambdaConfig {
             final var alignedSession = ingressService.processIngress(webhook);
             webhook.setSession(alignedSession);
 
-            // Step 4: Process synchronously for Lambda
-            signalProcessor.processWebhookAsync(webhook);
+            // Step 4: Process synchronously for Lambda (MUST wait for completion)
+            final var tradeSignal = signalProcessor.processWebhook(webhook);
 
             return MessageBuilder.withPayload(Map.<String, Object>of(
                     "success", true,
-                    "status", "ACCEPTED",
-                    "message", "Webhook received",
-                    "symbol", webhook.getSymbol())).setHeader("statusCode", 202).build();
+                    "status", tradeSignal.getStatus(),
+                    "message", "Signal processed",
+                    "symbol", webhook.getSymbol(),
+                    "signalId", tradeSignal.getSignalId())).setHeader("statusCode", 200).build();
         };
     }
 

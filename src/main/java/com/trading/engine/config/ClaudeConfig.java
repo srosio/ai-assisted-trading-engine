@@ -17,7 +17,7 @@ public class ClaudeConfig {
     private String model = "claude-sonnet-4-5-20250929";
 
     // Fast model (Haiku) for pre-filtering - 90% cheaper
-    private String haikuModel = "claude-haiku-4-20250514";
+    private String haikuModel = "claude-haiku-4-5-20251001";
 
     private Integer maxTokens = 1024;
 
