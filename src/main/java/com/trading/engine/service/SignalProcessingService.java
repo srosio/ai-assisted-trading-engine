@@ -7,9 +7,26 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
+/**
+ * Signal Processing Service - Orchestrates the 9-step trading signal pipeline
+ * 
+ * Pipeline:
+ * 1. Market Context Building (Binance data)
+ * 2. Intraday Context Engine (deterministic analysis)
+ * 3. AI Analysis (with smart gating & caching)
+ * 4. Rule Validation (non-negotiable rules)
+ * 5. Execution Planning (entry/stop/targets)
+ * 6. Execution Advisory (pre-trade checklist)
+ * 7. Signal Creation (VALID/INVALID status)
+ * 8. Journal Persistence (DynamoDB)
+ * 9. Telegram Notification (VALID signals only)
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -24,106 +41,245 @@ public class SignalProcessingService {
     private final NotificationService notificationService;
     private final ClaudeConfig claudeConfig;
 
+    /**
+     * Async webhook processing for non-blocking API responses
+     */
     @Async
     public void processWebhookAsync(final TradingViewWebhook webhook) {
+        final var startTime = Instant.now();
         try {
-            log.info("Processing webhook asynchronously for {} - Strategy: {}, Event: {}, Direction: {}",
+            log.info("[ASYNC] Processing webhook for {} - Strategy: {}, Event: {}, Direction: {}",
                     webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
             processWebhook(webhook);
+            final var duration = Duration.between(startTime, Instant.now());
+            log.info("[ASYNC] Webhook processing completed in {}ms", duration.toMillis());
         } catch (final Exception e) {
-            log.error("Error in async webhook processing: {}", e.getMessage(), e);
+            log.error("[ASYNC] Error in webhook processing: {}", e.getMessage(), e);
             sendErrorToTelegram(webhook, e);
         }
     }
 
+    /**
+     * Main webhook processing pipeline - 9 steps from webhook to notification
+     */
     public TradeSignal processWebhook(final TradingViewWebhook webhook) {
         final var signalId = UUID.randomUUID().toString();
-        log.info("Processing webhook {} for {} - Strategy: {}, Event: {}, Direction: {}",
-                signalId, webhook.getSymbol(), webhook.getStrategy(), webhook.getEventType(), webhook.getDirection());
+        final var startTime = Instant.now();
+        
+        log.info("[{}] Starting signal pipeline for {} - Strategy: {}, Event: {}, Direction: {}",
+                signalId.substring(0, 8), webhook.getSymbol(), webhook.getStrategy(), 
+                webhook.getEventType(), webhook.getDirection());
 
         try {
-            // Step 1: Build market context
-            log.info("Step 1: Building market data aggregation");
-            final var context = contextBuilder.buildContext(webhook);
-
-            // Continue processing even if context is invalid - we'll capture the issue in the signal
-            if (!contextBuilder.isContextValid(context)) {
-                log.warn("Invalid market context data - continuing with limited analysis");
-            }
-
+            // Step 1: Build market context from Binance
+            final var context = buildMarketContext(webhook);
+            
             // Step 2: Build intraday context (deterministic analysis)
-            log.info("Step 2: Building intraday context (deterministic)");
-            final var intradayContext = intradayEngine.buildContext(webhook.getSymbol(), context);
-            log.info("Intraday context: {} - Confidence: {}/100",
-                    intradayContext.getOiPriceBehavior(), intradayContext.getConfidenceScore());
-
+            final var intradayContext = buildIntradayContext(webhook.getSymbol(), context);
+            
+            // Step 3: AI Analysis (with smart gating)
             final var direction = mapDirectionToTradeDirection(webhook.getDirection());
-            AiAssessment assessment;
-            ExecutionPlan executionPlan = null;
-
-            if (claudeConfig.isEnableSmartGating() &&
-                intradayContext.getConfidenceScore() < claudeConfig.getSmartGatingThreshold()) {
-
-                log.info("SMART GATING: Skipping AI analysis - confidence {}/100 below threshold {}/100 (30-40% cost savings)",
-                        intradayContext.getConfidenceScore(), claudeConfig.getSmartGatingThreshold());
-
-                // Use static analysis for low-confidence signals
-                assessment = createLowConfidenceAssessment(intradayContext);
-            } else {
-                log.info("Step 3: Requesting optimized combined AI analysis (1 API call vs 2 legacy calls - 50% savings)");
-                final var combinedAnalysis = aiAnalysis.analyzeCombined(context, webhook, intradayContext, direction);
-
-                // Extract assessment and execution plan from combined result
-                assessment = combinedAnalysis.toAiAssessment();
-                executionPlan = combinedAnalysis.toExecutionPlan();
-
-                log.info("AI analysis complete - Quality: {}, Model: {}",
-                        assessment.getSetupQuality(),
-                        executionPlan != null ? executionPlan.getExecutionModel() : "none");
-            }
-
-            // Step 3: Rule validation
-            log.info("Step 3: Validating against trading rules");
-            final var ruleResult = ruleEngine.validateSetup(context, assessment);
-
-            // Step 4: Execution advisory checklist
-            log.info("Step 4: Running execution advisory checks");
-            final var checklist = executionAdvisory.generateChecklist(
-                    webhook.getSymbol(), context, intradayContext
-            );
-            log.info("Execution checklist: {} - Ready: {}",
-                    checklist.getChecklistSummary(), checklist.getReadyForExecution());
-
-            // Step 5: Create trade signal
-            log.info("Step 5: Creating trade signal");
+            final var aiResult = performAiAnalysis(context, webhook, intradayContext, direction);
+            
+            // Step 4: Rule validation
+            final var ruleResult = validateRules(context, aiResult.assessment);
+            
+            // Step 5: Execution advisory
+            final var checklist = generateAdvisory(webhook.getSymbol(), context, intradayContext);
+            
+            // Step 6: Create trade signal
             final var signal = createTradeSignal(
-                    signalId, webhook, context, intradayContext, assessment,
-                    executionPlan, ruleResult, checklist, direction
+                    signalId, webhook, context, intradayContext, 
+                    aiResult.assessment, aiResult.executionPlan, 
+                    ruleResult, checklist, direction
             );
-
-            // Step 8: Journal entry
-            log.info("Step 8: Creating journal entry");
-            journalService.createEntry(signal);
-
-            // Step 9: Notification (send once at the end with complete analysis)
-            log.info("Step 9: Sending notification - Status: {}", signal.getStatus());
-            notificationService.sendSignalNotification(signal);
-
-            log.info("Signal processing complete - Status: {}", signal.getStatus());
+            
+            // Step 7: Journal persistence
+            persistToJournal(signal);
+            
+            // Step 8: Send notification
+            sendNotification(signal);
+            
+            logPipelineCompletion(signalId, signal, startTime);
             return signal;
 
         } catch (final Exception e) {
-            log.error("Error processing webhook: {}", e.getMessage(), e);
-            final var signal = createErrorSignal(signalId, webhook, e.getMessage());
-            try {
-                log.info("Sending notification for error signal");
-                notificationService.sendSignalNotification(signal);
-            } catch (final Exception notifyError) {
-                log.error("Failed to send error notification: {}", notifyError.getMessage());
-            }
-            return signal;
+            return handlePipelineError(signalId, webhook, e, startTime);
         }
     }
+    
+    /**
+     * Step 1: Build market context from Binance data
+     */
+    private MarketContext buildMarketContext(final TradingViewWebhook webhook) {
+        log.debug("[Step 1] Building market context from Binance");
+        final var context = contextBuilder.buildContext(webhook);
+        
+        if (!contextBuilder.isContextValid(context)) {
+            log.warn("[Step 1] Invalid market context - continuing with limited data");
+        }
+        
+        return context;
+    }
+    
+    /**
+     * Step 2: Build intraday context (deterministic analysis)
+     */
+    private IntradayContext buildIntradayContext(final String symbol, final MarketContext context) {
+        log.debug("[Step 2] Building intraday context (deterministic)");
+        final var intradayContext = intradayEngine.buildContext(symbol, context);
+        
+        log.info("[Step 2] Intraday: {} | Confidence: {}/100 | Trends: {}/{}/{}",
+                intradayContext.getOiPriceBehavior(),
+                intradayContext.getConfidenceScore(),
+                intradayContext.getTrendBias15m(),
+                intradayContext.getTrendBias5m(),
+                intradayContext.getTrendBias1m());
+        
+        return intradayContext;
+    }
+    
+    /**
+     * Step 3: AI Analysis with smart gating
+     */
+    private AiResult performAiAnalysis(final MarketContext context, 
+                                       final TradingViewWebhook webhook,
+                                       final IntradayContext intradayContext, 
+                                       final String direction) {
+        // Smart gating: Skip AI for low-confidence signals
+        if (shouldSkipAiAnalysis(intradayContext)) {
+            log.info("[Step 3] SMART GATING: Skipping AI - confidence {}/100 < threshold {}/100 (30-40% cost savings)",
+                    intradayContext.getConfidenceScore(), claudeConfig.getSmartGatingThreshold());
+            return new AiResult(createLowConfidenceAssessment(intradayContext), null);
+        }
+        
+        log.debug("[Step 3] Requesting AI analysis (combined call - 50% cost savings)");
+        final var combinedAnalysis = aiAnalysis.analyzeCombined(context, webhook, intradayContext, direction);
+        
+        final var assessment = combinedAnalysis.toAiAssessment();
+        final var executionPlan = combinedAnalysis.toExecutionPlan();
+        
+        log.info("[Step 3] AI complete - Quality: {} | Alignment: {}/100 | Model: {}",
+                assessment.getSetupQuality(),
+                assessment.getAlignmentScore(),
+                executionPlan != null ? executionPlan.getExecutionModel() : "none");
+        
+        return new AiResult(assessment, executionPlan);
+    }
+    
+    /**
+     * Step 4: Validate against trading rules
+     */
+    private RuleResult validateRules(final MarketContext context, final AiAssessment assessment) {
+        log.debug("[Step 4] Validating trading rules");
+        final var ruleResult = ruleEngine.validateSetup(context, assessment);
+        
+        log.info("[Step 4] Rules: {} | Passed: {}/{}",
+                ruleResult.isPassed() ? "PASSED" : "FAILED",
+                ruleResult.getPassedRules() != null ? ruleResult.getPassedRules().size() : 0,
+                (ruleResult.getPassedRules() != null ? ruleResult.getPassedRules().size() : 0) +
+                (ruleResult.getFailedRules() != null ? ruleResult.getFailedRules().size() : 0));
+        
+        return ruleResult;
+    }
+    
+    /**
+     * Step 5: Generate execution advisory checklist
+     */
+    private ExecutionChecklist generateAdvisory(final String symbol, 
+                                                 final MarketContext context,
+                                                 final IntradayContext intradayContext) {
+        log.debug("[Step 5] Generating execution advisory");
+        final var checklist = executionAdvisory.generateChecklist(symbol, context, intradayContext);
+        
+        log.info("[Step 5] Advisory: {} | Ready: {}",
+                checklist.getChecklistSummary(),
+                checklist.getReadyForExecution());
+        
+        return checklist;
+    }
+    
+    /**
+     * Step 7: Persist signal to journal
+     */
+    private void persistToJournal(final TradeSignal signal) {
+        log.debug("[Step 7] Persisting to journal");
+        try {
+            journalService.createEntry(signal);
+            log.info("[Step 7] Journal entry created - ID: {}", signal.getSignalId());
+        } catch (final Exception e) {
+            log.error("[Step 7] Failed to persist journal entry: {}", e.getMessage());
+            // Don't fail the entire pipeline if journaling fails
+        }
+    }
+    
+    /**
+     * Step 8: Send Telegram notification
+     */
+    private void sendNotification(final TradeSignal signal) {
+        log.debug("[Step 8] Sending notification");
+        try {
+            notificationService.sendSignalNotification(signal);
+            log.info("[Step 8] Notification sent - Status: {}", signal.getStatus());
+        } catch (final Exception e) {
+            log.error("[Step 8] Failed to send notification: {}", e.getMessage());
+            // Don't fail the entire pipeline if notification fails
+        }
+    }
+    
+    /**
+     * Check if AI analysis should be skipped (smart gating)
+     */
+    private boolean shouldSkipAiAnalysis(final IntradayContext intradayContext) {
+        return claudeConfig.isEnableSmartGating() &&
+               intradayContext.getConfidenceScore() < claudeConfig.getSmartGatingThreshold();
+    }
+    
+    /**
+     * Log pipeline completion with metrics
+     */
+    private void logPipelineCompletion(final String signalId, final TradeSignal signal, final Instant startTime) {
+        final var duration = Duration.between(startTime, Instant.now());
+        log.info("[{}] Pipeline complete - Status: {} | Duration: {}ms | Quality: {} | Action: {}",
+                signalId.substring(0, 8),
+                signal.getStatus(),
+                duration.toMillis(),
+                signal.getAiAssessment() != null ? signal.getAiAssessment().getSetupQuality() : "N/A",
+                signal.getAction());
+    }
+    
+    /**
+     * Handle pipeline errors gracefully
+     */
+    private TradeSignal handlePipelineError(final String signalId, 
+                                             final TradingViewWebhook webhook,
+                                             final Exception e, 
+                                             final Instant startTime) {
+        final var duration = Duration.between(startTime, Instant.now());
+        log.error("[{}] Pipeline error after {}ms: {}", 
+                signalId.substring(0, 8), duration.toMillis(), e.getMessage(), e);
+        
+        final var signal = createErrorSignal(signalId, webhook, e.getMessage());
+        
+        try {
+            journalService.createEntry(signal);
+        } catch (final Exception journalError) {
+            log.error("Failed to journal error signal: {}", journalError.getMessage());
+        }
+        
+        try {
+            notificationService.sendSignalNotification(signal);
+        } catch (final Exception notifyError) {
+            log.error("Failed to send error notification: {}", notifyError.getMessage());
+        }
+        
+        return signal;
+    }
+    
+    /**
+     * Helper record for AI analysis results
+     */
+    private record AiResult(AiAssessment assessment, ExecutionPlan executionPlan) {}
 
     private TradeSignal createTradeSignal(final String signalId, final TradingViewWebhook webhook,
                                            final MarketContext context, final IntradayContext intradayContext,
@@ -167,20 +323,30 @@ public class SignalProcessingService {
                 .build();
     }
 
+    /**
+     * Create assessment for low-confidence signals (smart gating)
+     */
     private AiAssessment createLowConfidenceAssessment(final IntradayContext intradayContext) {
         return AiAssessment.builder()
                 .setupQuality("C")
-                .riskFactors(java.util.List.of(
-                        String.format("Low confidence score: %d/100", intradayContext.getConfidenceScore()),
-                        "Market microstructure not favorable",
-                        "Smart gating threshold not met"
+                .riskFactors(List.of(
+                        String.format("Low confidence: %d/100 (threshold: %d/100)", 
+                                intradayContext.getConfidenceScore(), 
+                                claudeConfig.getSmartGatingThreshold()),
+                        "Market microstructure: " + intradayContext.getOiPriceBehavior(),
+                        "Volume confirmation: " + intradayContext.getVolumeConfirmation()
                 ))
-                .invalidation("Setup does not meet minimum confidence criteria")
-                .summary(String.format("Setup rejected by smart gating (confidence: %d/100, threshold: %d/100). " +
-                        "AI analysis skipped for cost savings.",
-                        intradayContext.getConfidenceScore(), claudeConfig.getSmartGatingThreshold()))
+                .invalidation("Confidence threshold not met")
+                .summary(String.format("Smart gating rejection (confidence: %d/100 < %d/100). " +
+                        "Market conditions: %s. AI analysis skipped for cost optimization.",
+                        intradayContext.getConfidenceScore(), 
+                        claudeConfig.getSmartGatingThreshold(),
+                        intradayContext.getContextSummary()))
                 .alignmentScore(intradayContext.getConfidenceScore())
-                .keyObservation("Smart gating rejection - AI analysis not performed")
+                .keyObservation(String.format("Smart gating: %s | Trends: %s/%s",
+                        intradayContext.getSessionNarrative(),
+                        intradayContext.getTrendBias15m(),
+                        intradayContext.getTrendBias5m()))
                 .build();
     }
 
@@ -220,25 +386,30 @@ public class SignalProcessingService {
         }
     }
 
+    /**
+     * Format error message for Telegram notification
+     */
     private String formatErrorMessage(final TradingViewWebhook webhook, final Exception error) {
-        final var sb = new StringBuilder();
-        sb.append("🚨 <b>WEBHOOK PROCESSING ERROR</b>\n\n");
-        sb.append("<b>Symbol:</b> ").append(webhook.getSymbol()).append("\n");
-        sb.append("<b>Strategy:</b> ").append(webhook.getStrategy()).append("\n");
-        sb.append("<b>Event Type:</b> ").append(webhook.getEventType()).append("\n");
-        sb.append("<b>Direction:</b> ").append(webhook.getDirection()).append("\n");
-        sb.append("<b>Session:</b> ").append(webhook.getSession()).append("\n");
-        sb.append("<b>Timeframe:</b> ").append(webhook.getTimeframe()).append("\n\n");
-        sb.append("<b>Error:</b> ").append(error.getClass().getSimpleName()).append("\n");
-        sb.append("<b>Message:</b> ").append(error.getMessage()).append("\n\n");
-
-        if (error.getCause() != null) {
-            sb.append("<b>Cause:</b> ").append(error.getCause().getMessage()).append("\n\n");
-        }
-
-        sb.append("<b>Action Required:</b> Check logs and fix the issue\n");
-        sb.append("<b>Timestamp:</b> ").append(LocalDateTime.now()).append("\n");
-
-        return sb.toString();
+        return String.format(
+                "🚨 <b>PIPELINE ERROR</b>\n\n" +
+                "<b>Symbol:</b> %s\n" +
+                "<b>Strategy:</b> %s - %s\n" +
+                "<b>Direction:</b> %s | <b>Session:</b> %s\n" +
+                "<b>Timeframe:</b> %s\n\n" +
+                "<b>Error:</b> %s\n" +
+                "<b>Message:</b> %s\n%s" +
+                "<b>Time:</b> %s\n\n" +
+                "⚠️ Check CloudWatch logs for details",
+                webhook.getSymbol(),
+                webhook.getStrategy(),
+                webhook.getEventType(),
+                webhook.getDirection(),
+                webhook.getSession(),
+                webhook.getTimeframe(),
+                error.getClass().getSimpleName(),
+                error.getMessage(),
+                error.getCause() != null ? "<b>Cause:</b> " + error.getCause().getMessage() + "\n" : "",
+                LocalDateTime.now()
+        );
     }
 }

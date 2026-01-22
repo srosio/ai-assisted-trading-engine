@@ -188,6 +188,17 @@ public class AiAnalysisService {
         if (webhook.getCurrentPrice() != null) ctx.put("currentPrice", webhook.getCurrentPrice());
         if (webhook.getSuggestedStopLoss() != null) ctx.put("suggestedStopLoss", webhook.getSuggestedStopLoss());
 
+        // NEW: Enhanced context from TradingView
+        if (webhook.getRsiValue() != null) ctx.put("rsi", webhook.getRsiValue());
+        if (webhook.getAtrValue() != null) ctx.put("atr", webhook.getAtrValue());
+        if (webhook.getPreviousDayHigh() != null) ctx.put("prevDayHigh", webhook.getPreviousDayHigh());
+        if (webhook.getPreviousDayLow() != null) ctx.put("prevDayLow", webhook.getPreviousDayLow());
+        if (webhook.getCandleMetrics() != null) {
+            final var metrics = webhook.getCandleMetrics();
+            if (metrics.getWickPercent() != null) ctx.put("wickPct", metrics.getWickPercent());
+            if (metrics.getBodyPercent() != null) ctx.put("bodyPct", metrics.getBodyPercent());
+        }
+
         // Market context
         ctx.put("sym", context.getSymbol());
         ctx.put("px", context.getCurrentPrice());
@@ -267,7 +278,7 @@ public class AiAnalysisService {
             return java.util.Map.of(
                 "name", "Liquidity Sweeps",
                 "profile", "45-55% WR, 1:3-1:5 R:R, liquidity grab reversal",
-                "expected", "Equal highs/lows swept, displacement reversal, volume confirmation"
+                "expected", "Equal highs/lows swept, strong displacement (>1.5 ATR), rejection candle (high wick%), volume confirmation"
             );
         }
 
@@ -275,7 +286,7 @@ public class AiAnalysisService {
             return java.util.Map.of(
                 "name", "Candle 2 Closure with RSI",
                 "profile", "60-70% WR, 1:2-1:3 R:R, two-candle reversal pattern",
-                "expected", "RSI extreme (>70 or <30), two consecutive candles closing against trend"
+                "expected", "RSI extreme (<30 or >70), two consecutive candles closing against trend, strong candle body (>60%), volume confirmation"
             );
         }
 

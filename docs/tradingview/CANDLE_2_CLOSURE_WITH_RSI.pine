@@ -63,8 +63,23 @@ var int barMilliseconds = 1000 * timeframe.in_seconds()
 // --- 1. Indicators ---
 rsiValue = ta.rsi(close, rsiLen)
 hmaValue = ta.hma(close, hmaLength)
+atrValue = ta.atr(14)
 
-// --- 2. Determine Session ---
+// --- 2. Previous Day Levels ---
+[prevDayHigh, prevDayLow] = request.security(syminfo.tickerid, "D", [high[1], low[1]])
+
+// --- 3. Candle Metrics ---
+candleRange = high - low
+candleBody = math.abs(close - open)
+wickSize = close > open ? (high - close) + (open - low) : (high - open) + (close - low)
+wickPercent = candleRange > 0 ? (wickSize / candleRange) * 100 : 0
+bodyPercent = candleRange > 0 ? (candleBody / candleRange) * 100 : 0
+
+// --- 4. Volume Spike Detection ---
+volSMA = ta.sma(volume, 20)
+volSpikeDetected = volume > volSMA * 2.0
+
+// --- 5. Determine Session ---
 is_asia = not na(time(timeframe.period, "0000-0800:1234567", "UTC"))
 is_london = not na(time(timeframe.period, "0700-1600:1234567", "UTC"))
 is_ny = not na(time(timeframe.period, "1300-2200:1234567", "UTC"))
@@ -79,11 +94,11 @@ get_session() =>
         s := "Asia"
     s
 
-// --- 3. Determine HTF Bias ---
+// --- 6. Determine HTF Bias ---
 get_bias() =>
     close > hmaValue ? "bullish" : "bearish"
 
-// --- 4. Universal JSON Generator ---
+// --- 7. Universal JSON Generator ---
 get_json(string _direction, string _eventType, float _price, float _sl, float _sweptLevel, string _htfBias) =>
     string _sess = get_session()
 
@@ -103,7 +118,18 @@ get_json(string _direction, string _eventType, float _price, float _sl, float _s
       '"context": {' +
           '"sweptLevel": ' + (na(_sweptLevel) ? "null" : str.tostring(_sweptLevel)) + ', ' +
           '"htfBias": "' + _htfBias + '", ' +
-          '"displacement": true' +
+          '"displacement": true, ' +
+          '"volumeSpike": ' + str.tostring(volSpikeDetected) + ', ' +
+          '"rsiValue": ' + str.tostring(rsiValue) + ', ' +
+          '"atrValue": ' + str.tostring(atrValue) + ', ' +
+          '"previousDayHigh": ' + str.tostring(prevDayHigh) + ', ' +
+          '"previousDayLow": ' + str.tostring(prevDayLow) + ', ' +
+          '"candleMetrics": {' +
+              '"wickPercent": ' + str.tostring(wickPercent) + ', ' +
+              '"bodyPercent": ' + str.tostring(bodyPercent) + ', ' +
+              '"range": ' + str.tostring(candleRange) + ', ' +
+              '"bodySize": ' + str.tostring(candleBody) +
+          '}' +
       '}, ' +
       '"timestamp": "' + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC") + '"' +
       '}'
