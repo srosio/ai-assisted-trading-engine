@@ -43,4 +43,6 @@ public class TradeSignal {
     private String status; // VALID, INVALID, EXPIRED
 
     private String action; // Human executes per execution plan
+
+    private SignalType signalType; // TRADE, WATCH, BLOCKED
 }

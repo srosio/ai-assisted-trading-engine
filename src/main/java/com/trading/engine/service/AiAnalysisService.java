@@ -140,7 +140,7 @@ public class AiAnalysisService {
         final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
         final var outputConverter = new BeanOutputConverter<>(CombinedAiAnalysis.class);
 
-        final var userMessage = "Analyze " + strategyContext.get("name") + " setup and create execution plan:\n\n" +
+        final var userMessage = "Analyze " + strategyContext.get("name") + " setup and provide actionable guidance:\n\n" +
                 "PART 1 - SETUP ASSESSMENT:\n" +
                 "Profile: " + strategyContext.get("profile") + "\n" +
                 "Expected criteria: " + strategyContext.get("expected") + "\n" +
@@ -153,8 +153,26 @@ public class AiAnalysisService {
                 "- Candle 2 Closure: Tight stops below pattern, 2-3R targets\n" +
                 "- Breakout: Inside range stops, 5-10R+ targets\n" +
                 "If quality is C, leave execution fields empty.\n\n" +
+                "PART 3 - PREPARATION GUIDANCE (ALWAYS provide, especially for B/C quality):\n" +
+                "Even if setup is not immediately tradeable, provide actionable guidance:\n\n" +
+                "- watchCondition: Single most important thing to monitor. Be specific with price levels.\n" +
+                "  Example: \"Watch for price rejection at 3300 with decreasing OI\"\n\n" +
+                "- improvementPath: What specific change would upgrade quality.\n" +
+                "  Example: \"Would become B-quality if 15m trend aligns bearish\"\n\n" +
+                "- preparationSteps: 2-3 actionable items (alerts to set, levels to monitor).\n" +
+                "  Example: [\"Set alert at 3300\", \"Monitor OI for bearish shift\"]\n\n" +
+                "- alternativeEntry: Different way to trade this idea.\n" +
+                "  Example: \"Consider limit order at 3200 support test\"\n\n" +
+                "- keyLevelToWatch: Most important price level with context.\n" +
+                "  Example: \"3300 daily high - break invalidates short thesis\"\n\n" +
+                "- timeframeGuidance: When to re-evaluate.\n" +
+                "  Example: \"Re-assess after 4h candle close\" or \"Wait for NY session\"\n\n" +
+                "PART 4 - CONTEXTUAL INSIGHTS:\n" +
+                "- htfConflictExplanation: If HTF bias conflicts with signal direction, explain why and what to watch.\n" +
+                "- oiBehaviorInsight: Interpret the OI + price behavior for this setup.\n\n" +
                 "Market Context:\n" + compactContext + "\n\n" +
                 "Direction: " + direction + "\n\n" +
+                "IMPORTANT: Always provide preparation guidance fields. Even A-quality setups benefit from knowing key levels.\n\n" +
                 outputConverter.getFormat();
 
         final var response = sonnetClient.prompt()
@@ -226,7 +244,10 @@ public class AiAnalysisService {
                 .invalidation("Failed pre-screening")
                 .summary("Setup rejected by AI pre-filter")
                 .alignmentScore(30)
-                .keyObservation("Pre-filter rejection - Sonnet analysis skipped")
+                .keyObservation("Pre-filter rejection - setup needs improvement")
+                .watchCondition("Monitor for improved market conditions")
+                .improvementPath("Setup may improve if market context aligns with direction")
+                .timeframeGuidance("Re-assess on next signal or session change")
                 .build();
     }
 

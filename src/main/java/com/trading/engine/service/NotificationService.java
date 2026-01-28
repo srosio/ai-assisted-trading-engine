@@ -3,6 +3,7 @@ package com.trading.engine.service;
 import com.trading.engine.config.TelegramConfig;
 import com.trading.engine.domain.AiAssessment;
 import com.trading.engine.domain.IntradayContext;
+import com.trading.engine.domain.SignalType;
 import com.trading.engine.domain.TradeSignal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,8 +42,19 @@ public class NotificationService extends TelegramLongPollingBot {
     }
 
     private String formatSignalMessage(final TradeSignal signal) {
+        final var signalType = signal.getSignalType();
+
+        // Use new three-tier system if signalType is set
+        if (signalType != null) {
+            return switch (signalType) {
+                case TRADE -> formatValidSignal(signal);
+                case WATCH -> formatWatchSignal(signal);
+                case BLOCKED -> formatBlockedSignal(signal);
+            };
+        }
+
+        // Fallback to legacy logic
         final var isValid = "VALID".equals(signal.getStatus());
-        
         if (isValid) {
             return formatValidSignal(signal);
         } else {
@@ -219,10 +231,170 @@ public class NotificationService extends TelegramLongPollingBot {
         }
         
         sb.append("<b>⛔ ACTION: DO NOT TRADE</b>\n");
-        
+
         return sb.toString();
     }
-    
+
+    /**
+     * Format WATCH signal - setup with potential, needs monitoring
+     */
+    private String formatWatchSignal(final TradeSignal signal) {
+        final var sb = new StringBuilder();
+        final var ctx = signal.getMarketContext();
+        final var ai = signal.getAiAssessment();
+        final var intraday = signal.getIntradayContext();
+
+        // Header
+        sb.append("👀 <b>WATCH SETUP</b>\n\n");
+
+        // Symbol & Direction
+        final var symbol = "$" + signal.getSymbol().replace("USDT", "");
+        sb.append("<b>").append(symbol).append(" ").append(signal.getDirection()).append("</b>\n");
+        sb.append(signal.getStrategy()).append(" • ").append(signal.getEventType());
+        if (ctx != null && ctx.getSession() != null) {
+            sb.append(" • ").append(ctx.getSession());
+        }
+        sb.append("\n\n");
+
+        // Current Status
+        sb.append("<b>📍 STATUS</b>\n");
+        if (ai != null) {
+            sb.append("Quality: <b>").append(ai.getSetupQuality()).append("</b>");
+            if (ai.getImprovementPath() != null) {
+                sb.append(" → Can improve");
+            }
+            sb.append("\n");
+        }
+        if (intraday != null && intraday.getConfidenceScore() != null) {
+            sb.append("Confidence: ").append(intraday.getConfidenceScore()).append("/100\n");
+        }
+        if (signal.getAction() != null) {
+            sb.append("Issue: ").append(truncate(signal.getAction(), 60)).append("\n");
+        }
+        sb.append("\n");
+
+        // Market Context
+        sb.append("<b>📊 CONTEXT</b>\n");
+        if (ctx != null) {
+            if (ctx.getHtfBias() != null) {
+                sb.append("HTF Bias: <b>").append(ctx.getHtfBias()).append("</b>\n");
+            }
+            if (ctx.getCurrentPrice() != null) {
+                sb.append("Price: ").append(ctx.getCurrentPrice()).append("\n");
+            }
+            if (ctx.getOiChangePercent() != null) {
+                sb.append("OI: ").append(formatOiChange(ctx.getOiChangePercent())).append("\n");
+            }
+            if (ctx.getFundingRate() != null) {
+                sb.append("Funding: ").append(formatFunding(ctx.getFundingRate())).append("\n");
+            }
+        }
+
+        // HTF Conflict Analysis (if present)
+        if (ai != null && ai.getHtfConflictExplanation() != null) {
+            sb.append("\n<b>⚠️ CONFLICT</b>\n");
+            sb.append(ai.getHtfConflictExplanation()).append("\n");
+        }
+
+        // Key Level
+        if (ai != null && ai.getKeyLevelToWatch() != null) {
+            sb.append("\n<b>🎯 KEY LEVEL</b>\n");
+            sb.append(ai.getKeyLevelToWatch()).append("\n");
+        }
+        sb.append("\n");
+
+        // Watch For
+        sb.append("<b>🔄 WATCH FOR</b>\n");
+        if (ai != null && ai.getWatchCondition() != null) {
+            sb.append(ai.getWatchCondition()).append("\n");
+        }
+        if (ai != null && ai.getImprovementPath() != null) {
+            sb.append("\n<i>").append(ai.getImprovementPath()).append("</i>\n");
+        }
+        sb.append("\n");
+
+        // Preparation Steps
+        if (ai != null && ai.getPreparationSteps() != null && !ai.getPreparationSteps().isEmpty()) {
+            sb.append("<b>📝 PREPARATION</b>\n");
+            for (final var step : ai.getPreparationSteps()) {
+                sb.append("• ").append(step).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        // Alternative Entry (if provided)
+        if (ai != null && ai.getAlternativeEntry() != null) {
+            sb.append("<b>💡 ALTERNATIVE</b>\n");
+            sb.append(ai.getAlternativeEntry()).append("\n\n");
+        }
+
+        // Timeframe
+        if (ai != null && ai.getTimeframeGuidance() != null) {
+            sb.append("<b>⏰ RE-ASSESS</b>\n");
+            sb.append(ai.getTimeframeGuidance()).append("\n\n");
+        }
+
+        // Action
+        sb.append("<b>⚡ ACTION: PREPARE & MONITOR</b>\n");
+        sb.append("Not ready - conditions can improve\n");
+
+        return sb.toString();
+    }
+
+    /**
+     * Format BLOCKED signal - hard rule violation
+     */
+    private String formatBlockedSignal(final TradeSignal signal) {
+        final var sb = new StringBuilder();
+        final var ctx = signal.getMarketContext();
+        final var ai = signal.getAiAssessment();
+
+        // Header
+        sb.append("🚫 <b>SETUP BLOCKED</b>\n\n");
+
+        // Symbol & Direction
+        final var symbol = "$" + signal.getSymbol().replace("USDT", "");
+        sb.append("<b>").append(symbol).append(" ").append(signal.getDirection()).append("</b>\n");
+        sb.append(signal.getStrategy()).append(" • ").append(signal.getEventType());
+        if (ctx != null && ctx.getSession() != null) {
+            sb.append(" • ").append(ctx.getSession());
+        }
+        sb.append("\n\n");
+
+        // Hard Block Reason
+        sb.append("<b>❌ HARD BLOCK</b>\n");
+        sb.append(signal.getAction()).append("\n\n");
+
+        // Brief Context
+        sb.append("<b>📊 CONTEXT</b>\n");
+        if (ai != null) {
+            sb.append("Quality: ").append(ai.getSetupQuality()).append("\n");
+        }
+        if (signal.getIntradayContext() != null && signal.getIntradayContext().getConfidenceScore() != null) {
+            sb.append("Confidence: ").append(signal.getIntradayContext().getConfidenceScore()).append("/100\n");
+        }
+
+        // Learning note - why this failed
+        if (ai != null && ai.getRiskFactors() != null && !ai.getRiskFactors().isEmpty()) {
+            sb.append("\n<b>📚 FACTORS</b>\n");
+            for (int i = 0; i < Math.min(2, ai.getRiskFactors().size()); i++) {
+                sb.append("• ").append(ai.getRiskFactors().get(i)).append("\n");
+            }
+        }
+
+        sb.append("\n<b>⛔ ACTION: DO NOT TRADE</b>\n");
+        sb.append("Rule violation - no override\n");
+
+        return sb.toString();
+    }
+
+    // Helper for truncating long strings
+    private String truncate(final String text, final int maxLength) {
+        if (text == null) return "";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + "...";
+    }
+
     // Helper methods for formatting
     
     private String getQualityEmoji(final AiAssessment ai) {
