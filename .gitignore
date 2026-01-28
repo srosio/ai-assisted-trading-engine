@@ -50,3 +50,7 @@ application-*.yml
 !application.yml
 !application-example.yml
 !application-mock.yml
+
+### AWS CloudFormation ###
+packaged-template.yaml
+.aws-sam/

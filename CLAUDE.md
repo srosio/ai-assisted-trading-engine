@@ -21,20 +21,34 @@ AI-Assisted Crypto Trading Engine - A serverless, rule-based crypto trading syst
 
 ### Build & Test
 ```bash
-# Build project (skip tests)
-./gradlew bootJar -x test
+# Build project (skip tests) - uses Shadow JAR for Lambda
+./gradlew shadowJar -x test
 
 # Build with tests
-./gradlew build
+./gradlew shadowJar
 
 # Run tests only
 ./gradlew test
 
+# Run specific test class
+./gradlew test --tests "com.trading.engine.service.RuleEngineServiceTest"
+
 # Clean build
-./gradlew clean build
+./gradlew clean shadowJar
 ```
 
 ### AWS Lambda Deployment
+
+#### Option 1: GitHub Actions (Automated)
+```bash
+# Automatic deployment on push to develop/main
+git push origin develop
+
+# Or manually trigger via GitHub Actions UI
+# See .github/SETUP.md for configuration details
+```
+
+#### Option 2: Script Deployment
 ```bash
 # Deploy to AWS (requires AWS CLI configured and S3 bucket)
 ./scripts/deploy.sh <your-s3-bucket-name>
@@ -43,10 +57,26 @@ AI-Assisted Crypto Trading Engine - A serverless, rule-based crypto trading syst
 ./scripts/deploy.sh ai-trading-deployment-bucket
 ```
 
+#### Option 3: Manual Deployment
+```bash
+./gradlew shadowJar -x test
+aws cloudformation package \
+  --template-file template.yaml \
+  --s3-bucket <bucket-name> \
+  --output-template-file packaged-template.yaml
+aws cloudformation deploy \
+  --template-file packaged-template.yaml \
+  --stack-name ai-trading-engine \
+  --capabilities CAPABILITY_IAM
+```
+
 ### Monitoring
 ```bash
 # View Lambda logs in real-time
-aws logs tail /aws/lambda/TradingEngineFunction --follow
+aws logs tail /aws/lambda/ai-trading-engine --follow
+
+# View last hour of logs
+aws logs tail /aws/lambda/ai-trading-engine --since 1h
 
 # Check CloudFormation stack status
 aws cloudformation describe-stacks --stack-name ai-trading-engine
@@ -61,7 +91,7 @@ aws cloudformation describe-stacks \
 ```bash
 # Update Lambda environment variables
 aws lambda update-function-configuration \
-  --function-name TradingEngineFunction \
+  --function-name ai-trading-engine \
   --environment Variables="{CLAUDE_API_KEY=your_key}"
 ```
 
@@ -86,6 +116,11 @@ The application uses **Spring Cloud Function** to expose 3 Lambda functions:
    - Output: Win rate, P&L, quality breakdown
 
 **Entry Point**: `StreamLambdaHandler::handleRequest` → Spring Cloud Function's `FunctionInvoker` routes to appropriate bean.
+
+**Route Mapping**:
+- `POST /api/webhook/tradingview` → `processWebhook` function
+- `GET /api/journal` → `getJournalEntries` function
+- `GET /api/journal/statistics` → `getStatistics` function
 
 ### Signal Processing Pipeline (9 Steps)
 
@@ -152,12 +187,40 @@ Main config: `src/main/resources/application.yml`
 
 Defined in `template.yaml` (SAM/CloudFormation):
 
-- **Lambda Function**: 2048MB memory, Java 21, SnapStart enabled
-- **DynamoDB Table**: `journal_entries` with GSIs (by-symbol, by-quality)
+- **Lambda Function**: 2048MB memory, Java 21, SnapStart enabled, 30s timeout
+- **DynamoDB Tables**:
+  - `journal_entries` with GSIs (by-symbol, by-quality) - Trade journal
+  - `ai_cache` with TTL - AI response caching (20-30% cost savings)
 - **API Gateway**: HTTP API with webhook/journal/stats routes
 - **IAM Roles**: Lambda execution role with DynamoDB permissions
+- **CloudWatch**: Log group (7-day retention) and usage alarms
 
 ## Development Guidelines
+
+### Code Conventions
+
+**Lombok Patterns**:
+- Use `@RequiredArgsConstructor` for constructor injection (all services)
+- Use `@Slf4j` for logging instead of manual logger instantiation
+- Use `@Builder` for complex domain objects with many fields
+- Prefer final fields for immutable dependencies
+
+**Null Safety**:
+- Always check for null before accessing nested properties
+- Use ternary operators for null-safe defaults
+- Use `Boolean.TRUE.equals()` for Boolean wrapper comparisons
+- Provide fallback values for missing data
+
+**Exception Handling**:
+- Catch specific exceptions when possible
+- Always log exceptions with context before returning fallback values
+- Return safe defaults (BigDecimal.ZERO, 0.0, empty strings) instead of throwing
+- Graceful degradation: Fall back to static analysis when AI unavailable
+
+**BigDecimal Usage**:
+- Use string constructors for exact decimals: `new BigDecimal("1.5")`
+- Always set scale for financial values: `.setScale(2, RoundingMode.HALF_UP)`
+- Document multipliers in comments for clarity
 
 ### Code Structure
 
@@ -212,10 +275,15 @@ Claude API calls are in `AiAnalysisService`:
 - **Fallback**: `StaticAnalysisService` provides deterministic analysis if Claude unavailable
 
 Configuration:
-- Model: `claude-sonnet-4-5-20250929`
+- **Primary Model**: `claude-sonnet-4-5-20250929` (full analysis)
+- **Pre-filter Model**: `claude-haiku-4-20250514` (90% cheaper, fast screening)
 - Temperature: `0.3` (deterministic)
 - Max tokens: `1024`
 - Timeout: `30s`
+- **Cost Optimizations** (configurable in application.yml):
+  - Smart Gating: Skip AI for signals below confidence threshold (default: 60)
+  - Haiku Pre-filter: Use cheaper model first
+  - Caching: Reuse similar market analyses (20-30% savings)
 
 ### DynamoDB Schema
 
@@ -229,6 +297,11 @@ Configuration:
 - Analysis: marketContext, aiAssessment, ruleResult (serialized JSON)
 - Execution: entryPrice, stopLoss, takeProfit, riskRewardRatio
 - Outcomes: tradeTaken, outcome, pnl, exitPrice, closedAt
+
+**Table**: `ai_cache` (Cost Optimization)
+- **Partition Key**: `cacheKey` (String - hash of market context)
+- **TTL**: `ttl` (Number - automatic expiration)
+- **Attributes**: cachedResponse (AI analysis), createdAt, modelUsed
 
 ### Testing
 
@@ -258,12 +331,50 @@ src/test/java/com/trading/engine/
 - **Cache TTL**: 10 seconds for Binance market data (in-memory)
 - **DynamoDB**: On-Demand billing, no provisioned capacity
 
+## CI/CD with GitHub Actions
+
+The project uses GitHub Actions for automated builds and deployments.
+
+### Workflows
+
+1. **`deploy.yml`**: Builds, tests, and deploys to AWS on push to `develop` or `main`
+2. **`pr-validation.yml`**: Validates PRs with build and test (no deployment)
+
+### Setup Requirements
+
+Configure these GitHub Secrets (Settings → Secrets and variables → Actions):
+
+**AWS Credentials:**
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_DEPLOYMENT_BUCKET` (S3 bucket for CloudFormation artifacts)
+
+**Application Secrets:**
+- `WEBHOOK_API_KEY`
+- `CLAUDE_API_KEY`
+- `BINANCE_API_KEY`
+- `BINANCE_API_SECRET`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+**Full setup guide**: See `.github/SETUP.md` for detailed configuration instructions and IAM permissions.
+
+### Triggering Deployments
+
+```bash
+# Automatic: Push to develop/main triggers deployment
+git push origin develop
+
+# Manual: Use GitHub Actions UI
+# Actions → Build and Deploy to AWS → Run workflow
+```
+
 ## Common Workflows
 
 ### Deploying Updates
 ```bash
 # Build and deploy
-./gradlew bootJar -x test
+./gradlew shadowJar -x test
 ./scripts/deploy.sh <your-s3-bucket-name>
 ```
 
@@ -310,7 +421,7 @@ aws lambda update-function-configuration \
 ### Debugging Lambda Issues
 ```bash
 # View CloudWatch logs
-aws logs tail /aws/lambda/TradingEngineFunction --follow
+aws logs tail /aws/lambda/ai-trading-engine --follow
 
 # Check stack events
 aws cloudformation describe-stack-events \
@@ -319,9 +430,12 @@ aws cloudformation describe-stack-events \
 
 # Invoke function manually
 aws lambda invoke \
-  --function-name TradingEngineFunction \
+  --function-name ai-trading-engine \
   --payload '{"body":"{}"}' \
   response.json
+
+# Test locally (requires SAM CLI)
+sam local invoke TradingEngineFunction -e test-payloads/test-event.json
 ```
 
 ## Important Notes
@@ -331,7 +445,8 @@ aws lambda invoke \
 - **Async Processing**: Lambda is synchronous, but code supports `@Async` for future use.
 - **Deduplication**: `IngressService` prevents duplicate webhook processing.
 - **Notifications**: Telegram messages sent ONLY for VALID signals.
-- **Branch**: Currently on `feature/aws-serverless-migration`, main branch is `develop`.
+- **JAR Building**: Use `shadowJar` task (NOT `bootJar`) - configured in build.gradle
+- **Function Names**: Lambda function is named `ai-trading-engine` in CloudFormation template
 
 ## Key Files Reference
 
