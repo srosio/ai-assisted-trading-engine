@@ -33,6 +33,18 @@ public class CombinedAiAnalysis {
     private List<String> riskNotes;
     private String executionNotes;
 
+    // Preparation Guidance (populated for B/C quality)
+    private String watchCondition;
+    private String improvementPath;
+    private List<String> preparationSteps;
+    private String alternativeEntry;
+    private String keyLevelToWatch;
+    private String timeframeGuidance;
+
+    // Contextual reasoning
+    private String htfConflictExplanation;
+    private String oiBehaviorInsight;
+
     public AiAssessment toAiAssessment() {
         return AiAssessment.builder()
                 .setupQuality(setupQuality)
@@ -41,6 +53,14 @@ public class CombinedAiAnalysis {
                 .summary(summary)
                 .alignmentScore(alignmentScore)
                 .keyObservation(keyObservation)
+                .watchCondition(watchCondition)
+                .improvementPath(improvementPath)
+                .preparationSteps(preparationSteps)
+                .alternativeEntry(alternativeEntry)
+                .keyLevelToWatch(keyLevelToWatch)
+                .timeframeGuidance(timeframeGuidance)
+                .htfConflictExplanation(htfConflictExplanation)
+                .oiBehaviorInsight(oiBehaviorInsight)
                 .build();
     }
 

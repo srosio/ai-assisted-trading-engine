@@ -39,6 +39,7 @@ public class SignalProcessingService {
     private final ExecutionAdvisoryService executionAdvisory;
     private final JournalService journalService;
     private final NotificationService notificationService;
+    private final SignalClassificationService classificationService;
     private final ClaudeConfig claudeConfig;
 
     /**
@@ -286,25 +287,8 @@ public class SignalProcessingService {
                                            final AiAssessment assessment, final ExecutionPlan executionPlan,
                                            final RuleResult ruleResult, final ExecutionChecklist checklist,
                                            final String direction) {
-        final String status;
-        final String action;
-
-        if (!ruleResult.isPassed()) {
-            status = "INVALID";
-            action = "Setup blocked by rules - Do not trade";
-        } else if (assessment.getSetupQuality().equals("C")) {
-            status = "INVALID";
-            action = "Setup quality too low for consideration";
-        } else if (!checklist.getReadyForExecution()) {
-            status = "INVALID";
-            action = "Execution checklist failed - " + checklist.getChecklistSummary();
-        } else {
-            status = "VALID";
-            action = String.format("Execute per plan: %s - Review checklist before entry",
-                    executionPlan != null ? executionPlan.getExecutionModel() : "manual");
-        }
-
-        return TradeSignal.builder()
+        // Build initial signal
+        final var signal = TradeSignal.builder()
                 .signalId(signalId)
                 .symbol(webhook.getSymbol())
                 .direction(direction)
@@ -318,9 +302,61 @@ public class SignalProcessingService {
                 .ruleResult(ruleResult)
                 .executionChecklist(checklist)
                 .timestamp(LocalDateTime.now())
-                .status(status)
-                .action(action)
                 .build();
+
+        // Classify signal into TRADE/WATCH/BLOCKED
+        final var signalType = classificationService.classify(signal);
+        signal.setSignalType(signalType);
+
+        // Set status and action based on classification
+        switch (signalType) {
+            case TRADE -> {
+                signal.setStatus("VALID");
+                signal.setAction(String.format("Execute per plan: %s - Review checklist before entry",
+                        executionPlan != null ? executionPlan.getExecutionModel() : "manual"));
+            }
+            case WATCH -> {
+                signal.setStatus("WATCH");
+                signal.setAction(buildWatchAction(assessment, ruleResult, checklist));
+            }
+            case BLOCKED -> {
+                signal.setStatus("INVALID");
+                signal.setAction(buildBlockedAction(assessment, ruleResult, checklist));
+            }
+        }
+
+        log.info("[Step 6] Signal created - Type: {} | Status: {} | Quality: {}",
+                signalType, signal.getStatus(), assessment.getSetupQuality());
+
+        return signal;
+    }
+
+    private String buildWatchAction(final AiAssessment assessment, final RuleResult ruleResult,
+                                     final ExecutionChecklist checklist) {
+        if (assessment.getWatchCondition() != null) {
+            return "Watch: " + assessment.getWatchCondition();
+        }
+        if (!ruleResult.isPassed() && ruleResult.getFailedRules() != null && !ruleResult.getFailedRules().isEmpty()) {
+            return "Monitor - Rule issue: " + ruleResult.getFailedRules().get(0);
+        }
+        if (assessment.getImprovementPath() != null) {
+            return "Monitor - " + assessment.getImprovementPath();
+        }
+        return "Monitor for improved conditions";
+    }
+
+    private String buildBlockedAction(final AiAssessment assessment, final RuleResult ruleResult,
+                                       final ExecutionChecklist checklist) {
+        if (!ruleResult.isPassed() && ruleResult.getFailedRules() != null && !ruleResult.getFailedRules().isEmpty()) {
+            return "Blocked: " + ruleResult.getFailedRules().get(0);
+        }
+        if (checklist != null && checklist.getBlockers() != null && !checklist.getBlockers().isEmpty()) {
+            return "Blocked: " + checklist.getBlockers().get(0);
+        }
+        if ("C".equals(assessment.getSetupQuality())) {
+            return "Setup quality too low - Does not meet criteria";
+        }
+        return "Setup blocked by rules - Do not trade";
     }
 
     /**
@@ -330,8 +366,8 @@ public class SignalProcessingService {
         return AiAssessment.builder()
                 .setupQuality("C")
                 .riskFactors(List.of(
-                        String.format("Low confidence: %d/100 (threshold: %d/100)", 
-                                intradayContext.getConfidenceScore(), 
+                        String.format("Low confidence: %d/100 (threshold: %d/100)",
+                                intradayContext.getConfidenceScore(),
                                 claudeConfig.getSmartGatingThreshold()),
                         "Market microstructure: " + intradayContext.getOiPriceBehavior(),
                         "Volume confirmation: " + intradayContext.getVolumeConfirmation()
@@ -339,7 +375,7 @@ public class SignalProcessingService {
                 .invalidation("Confidence threshold not met")
                 .summary(String.format("Smart gating rejection (confidence: %d/100 < %d/100). " +
                         "Market conditions: %s. AI analysis skipped for cost optimization.",
-                        intradayContext.getConfidenceScore(), 
+                        intradayContext.getConfidenceScore(),
                         claudeConfig.getSmartGatingThreshold(),
                         intradayContext.getContextSummary()))
                 .alignmentScore(intradayContext.getConfidenceScore())
@@ -347,6 +383,10 @@ public class SignalProcessingService {
                         intradayContext.getSessionNarrative(),
                         intradayContext.getTrendBias15m(),
                         intradayContext.getTrendBias5m()))
+                // Preparation guidance for low-confidence signals
+                .watchCondition("Wait for confidence to improve above " + claudeConfig.getSmartGatingThreshold())
+                .improvementPath("Setup may improve when market microstructure aligns")
+                .timeframeGuidance("Re-assess on next signal or after market shift")
                 .build();
     }
 
