@@ -28,6 +28,19 @@ public class NotificationService extends TelegramLongPollingBot {
             return;
         }
 
+        // Only send notifications for actionable TRADE signals
+        final var signalType = signal.getSignalType();
+        if (signalType != null && signalType != SignalType.TRADE) {
+            log.debug("Skipping notification for non-actionable signal type: {}", signalType);
+            return;
+        }
+
+        // Also skip legacy INVALID signals
+        if (signalType == null && !"VALID".equals(signal.getStatus())) {
+            log.debug("Skipping notification for invalid signal status: {}", signal.getStatus());
+            return;
+        }
+
         final var message = formatSignalMessage(signal);
         sendMessage(message);
     }
