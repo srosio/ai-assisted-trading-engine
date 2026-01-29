@@ -28,14 +28,14 @@ public class NotificationService extends TelegramLongPollingBot {
             return;
         }
 
-        // Only send notifications for actionable TRADE signals
+        // Skip BLOCKED signals - they have no actionable value
         final var signalType = signal.getSignalType();
-        if (signalType != null && signalType != SignalType.TRADE) {
-            log.debug("Skipping notification for non-actionable signal type: {}", signalType);
+        if (signalType == SignalType.BLOCKED) {
+            log.debug("Skipping notification for BLOCKED signal");
             return;
         }
 
-        // Also skip legacy INVALID signals
+        // Also skip legacy INVALID signals (but allow WATCH through)
         if (signalType == null && !"VALID".equals(signal.getStatus())) {
             log.debug("Skipping notification for invalid signal status: {}", signal.getStatus());
             return;
@@ -249,107 +249,122 @@ public class NotificationService extends TelegramLongPollingBot {
     }
 
     /**
-     * Format WATCH signal - setup with potential, needs monitoring
+     * Format WATCH signal - setup with potential, actionable monitoring guidance
      */
     private String formatWatchSignal(final TradeSignal signal) {
         final var sb = new StringBuilder();
         final var ctx = signal.getMarketContext();
         final var ai = signal.getAiAssessment();
+        final var plan = signal.getExecutionPlan();
         final var intraday = signal.getIntradayContext();
 
-        // Header
-        sb.append("👀 <b>WATCH SETUP</b>\n\n");
+        // Header with quality
+        sb.append("👀 <b>WATCH: ").append(signal.getDirection()).append(" SETUP</b>\n\n");
 
         // Symbol & Direction
         final var symbol = "$" + signal.getSymbol().replace("USDT", "");
-        sb.append("<b>").append(symbol).append(" ").append(signal.getDirection()).append("</b>\n");
+        sb.append("<b>").append(symbol).append("</b> • ");
         sb.append(signal.getStrategy()).append(" • ").append(signal.getEventType());
         if (ctx != null && ctx.getSession() != null) {
             sb.append(" • ").append(ctx.getSession());
         }
         sb.append("\n\n");
 
-        // Current Status
-        sb.append("<b>📍 STATUS</b>\n");
-        if (ai != null) {
-            sb.append("Quality: <b>").append(ai.getSetupQuality()).append("</b>");
-            if (ai.getImprovementPath() != null) {
-                sb.append(" → Can improve");
-            }
-            sb.append("\n");
+        // Price Levels - Most important for action
+        sb.append("<b>💰 PRICE LEVELS</b>\n");
+        if (ctx != null && ctx.getCurrentPrice() != null) {
+            sb.append("Current: <b>").append(ctx.getCurrentPrice()).append("</b>\n");
         }
-        if (intraday != null && intraday.getConfidenceScore() != null) {
-            sb.append("Confidence: ").append(intraday.getConfidenceScore()).append("/100\n");
-        }
-        if (signal.getAction() != null) {
-            sb.append("Issue: ").append(truncate(signal.getAction(), 60)).append("\n");
-        }
-        sb.append("\n");
-
-        // Market Context
-        sb.append("<b>📊 CONTEXT</b>\n");
-        if (ctx != null) {
-            if (ctx.getHtfBias() != null) {
-                sb.append("HTF Bias: <b>").append(ctx.getHtfBias()).append("</b>\n");
+        if (plan != null) {
+            if (plan.getEntryZoneLow() != null && plan.getEntryZoneHigh() != null) {
+                sb.append("Entry Zone: ").append(plan.getEntryZoneLow())
+                  .append(" - ").append(plan.getEntryZoneHigh()).append("\n");
             }
-            if (ctx.getCurrentPrice() != null) {
-                sb.append("Price: ").append(ctx.getCurrentPrice()).append("\n");
+            if (plan.getSuggestedStopPrice() != null) {
+                sb.append("Stop Level: ").append(plan.getSuggestedStopPrice());
+                if (ctx != null && ctx.getCurrentPrice() != null) {
+                    final var risk = calculateRiskPercent(ctx.getCurrentPrice(), plan.getSuggestedStopPrice());
+                    sb.append(" (-").append(String.format("%.1f", risk)).append("%)");
+                }
+                sb.append("\n");
             }
-            if (ctx.getOiChangePercent() != null) {
-                sb.append("OI: ").append(formatOiChange(ctx.getOiChangePercent())).append("\n");
-            }
-            if (ctx.getFundingRate() != null) {
-                sb.append("Funding: ").append(formatFunding(ctx.getFundingRate())).append("\n");
+            if (plan.getTargets() != null && !plan.getTargets().isEmpty()) {
+                final var firstTarget = plan.getTargets().get(0);
+                sb.append("Target 1: ").append(firstTarget.getPrice());
+                if (firstTarget.getRMultiple() != null) {
+                    sb.append(" (").append(String.format("%.1f", firstTarget.getRMultiple())).append("R)");
+                }
+                sb.append("\n");
             }
         }
-
-        // HTF Conflict Analysis (if present)
-        if (ai != null && ai.getHtfConflictExplanation() != null) {
-            sb.append("\n<b>⚠️ CONFLICT</b>\n");
-            sb.append(ai.getHtfConflictExplanation()).append("\n");
-        }
-
-        // Key Level
+        // Key level from AI
         if (ai != null && ai.getKeyLevelToWatch() != null) {
-            sb.append("\n<b>🎯 KEY LEVEL</b>\n");
-            sb.append(ai.getKeyLevelToWatch()).append("\n");
+            sb.append("Key Level: ").append(ai.getKeyLevelToWatch()).append("\n");
         }
         sb.append("\n");
 
-        // Watch For
-        sb.append("<b>🔄 WATCH FOR</b>\n");
+        // Entry Trigger - What needs to happen
+        sb.append("<b>🎯 ENTER WHEN</b>\n");
         if (ai != null && ai.getWatchCondition() != null) {
             sb.append(ai.getWatchCondition()).append("\n");
         }
         if (ai != null && ai.getImprovementPath() != null) {
-            sb.append("\n<i>").append(ai.getImprovementPath()).append("</i>\n");
+            sb.append("<i>").append(ai.getImprovementPath()).append("</i>\n");
         }
         sb.append("\n");
 
-        // Preparation Steps
-        if (ai != null && ai.getPreparationSteps() != null && !ai.getPreparationSteps().isEmpty()) {
-            sb.append("<b>📝 PREPARATION</b>\n");
-            for (final var step : ai.getPreparationSteps()) {
-                sb.append("• ").append(step).append("\n");
+        // Market Context - Quick snapshot
+        sb.append("<b>📊 CONTEXT</b>\n");
+        if (ctx != null && ctx.getHtfBias() != null) {
+            sb.append("HTF: <b>").append(ctx.getHtfBias()).append("</b>");
+            if (intraday != null) {
+                sb.append(" | LTF: ").append(formatTrends(intraday));
             }
             sb.append("\n");
         }
+        if (ctx != null) {
+            if (ctx.getOiChangePercent() != null) {
+                sb.append("OI: ").append(formatOiChange(ctx.getOiChangePercent()));
+            }
+            if (ctx.getFundingRate() != null) {
+                sb.append(" | Funding: ").append(formatFunding(ctx.getFundingRate()));
+            }
+            sb.append("\n");
+        }
+        if (intraday != null && intraday.getOiPriceBehavior() != null) {
+            sb.append("Setup: ").append(formatOiBehavior(intraday.getOiPriceBehavior())).append("\n");
+        }
 
-        // Alternative Entry (if provided)
+        // Issue blocking the trade
+        if (ai != null && ai.getHtfConflictExplanation() != null) {
+            sb.append("\n<b>⚠️ ISSUE</b>\n");
+            sb.append(ai.getHtfConflictExplanation()).append("\n");
+        } else if (signal.getAction() != null) {
+            sb.append("\n<b>⚠️ ISSUE</b>\n");
+            sb.append(truncate(signal.getAction(), 80)).append("\n");
+        }
+
+        // Alternative entry if provided
         if (ai != null && ai.getAlternativeEntry() != null) {
-            sb.append("<b>💡 ALTERNATIVE</b>\n");
-            sb.append(ai.getAlternativeEntry()).append("\n\n");
+            sb.append("\n<b>💡 ALTERNATIVE</b>\n");
+            sb.append(ai.getAlternativeEntry()).append("\n");
         }
 
-        // Timeframe
+        // Re-assess timing
         if (ai != null && ai.getTimeframeGuidance() != null) {
-            sb.append("<b>⏰ RE-ASSESS</b>\n");
-            sb.append(ai.getTimeframeGuidance()).append("\n\n");
+            sb.append("\n<b>⏰ RE-ASSESS</b>\n");
+            sb.append(ai.getTimeframeGuidance()).append("\n");
         }
 
-        // Action
-        sb.append("<b>⚡ ACTION: PREPARE & MONITOR</b>\n");
-        sb.append("Not ready - conditions can improve\n");
+        // Action summary
+        sb.append("\n<b>⚡ ACTION: MONITOR FOR ENTRY</b>\n");
+        if (ai != null) {
+            sb.append("Quality: ").append(ai.getSetupQuality());
+            if (intraday != null && intraday.getConfidenceScore() != null) {
+                sb.append(" | Confidence: ").append(intraday.getConfidenceScore()).append("/100");
+            }
+        }
+        sb.append("\n");
 
         return sb.toString();
     }
