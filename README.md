@@ -1,6 +1,22 @@
 # AI-Assisted Crypto Trading Engine
 
-Rule-based crypto trading system with AI market analysis. Serverless on AWS Lambda.
+A serverless, rule-based crypto trading system that processes TradingView webhook signals and uses Claude AI exclusively for market context analysis—NOT for making trade decisions. The system validates signals against strict, non-negotiable trading rules and maintains a comprehensive trade journal.
+
+**Core Philosophy**: Strict, non-negotiable trading rules with AI providing context only. Rules cannot be overridden by AI or any other mechanism.
+
+## How It Works
+
+1. **TradingView sends webhook** when strategy conditions are met
+2. **System fetches real-time market data** from Binance (price, open interest, funding, volatility)
+3. **Intraday Context Engine** performs deterministic analysis of trends and market structure
+4. **Claude AI analyzes setup quality** and assigns A/B/C grade with confidence score
+5. **RuleEngineService validates** the signal against 6 non-negotiable rules
+6. **If rules pass**: Claude generates execution plan (entry zones, stops, targets)
+7. **Signal is classified** as TRADE (high confidence), WATCH (medium), or BLOCKED (failed rules)
+8. **Complete analysis saved** to DynamoDB trade journal
+9. **Telegram notification sent** for TRADE signals only
+
+The AI never makes trading decisions—it only provides context. The rule engine has final authority.
 
 ## Quick Start
 
@@ -19,42 +35,74 @@ aws lambda update-function-configuration \
 
 ## Features
 
-- ✅ **Rule-Based Trading**: Strict, non-negotiable trading rules for risk management
-- 🤖 **AI Context Analysis**: Claude AI provides market context (not trading decisions)
-- 📊 **TradingView Integration**: 3 strategies (45-85% WR) with webhook signals
-- 🔒 **Risk Management**: Position sizing, stop-loss, R-multiple tracking
-- 📝 **Trade Journaling**: Comprehensive PostgreSQL-based trade journal
-- 🔔 **Telegram Notifications**: Real-time alerts for valid trade setups
+- ✅ **Rule-Based Trading**: Strict, non-negotiable trading rules with no AI override capability
+- 🤖 **AI Context Analysis**: Claude AI provides market context only—rules make the final decisions
+- 📊 **TradingView Integration**: Webhook-based signal processing for multiple strategies
+- 🔒 **Risk Management**: Position sizing, stop-loss, R-multiple tracking, daily loss limits
+- 📝 **Trade Journaling**: Comprehensive DynamoDB-based trade journal with GSI queries
+- 🔔 **Telegram Notifications**: Real-time alerts for VALID trade setups only
 - ⚡ **Rate Limit Protection**: Automatic Binance API rate limiting and back-off
-- 🐳 **Docker Support**: Easy deployment with Docker Compose
+- 💰 **Cost Optimization**: AI caching, smart gating, and Haiku pre-filtering (30-40% savings)
 
-## TradingView Strategies
+## Supported Trading Strategies
 
-1. **BB Squeeze Mean Reversion** (75-85% WR, 1:2 R:R)
-   - Bollinger Band squeeze + RSI extreme + rejection wick
-   - Tight stops, quick profits, range-bound markets
+The system processes webhook signals from TradingView for the following strategy types:
 
-2. **Candle 2 Closure with RSI** (60-70% WR, 1:2-1:3 R:R)
-   - Two consecutive candles + RSI extreme
-   - Trend reversals, oversold/overbought conditions
+1. **LIQUIDITY_SWEEP**
+   - Identifies equal highs/lows swept with strong displacement
+   - Higher risk-reward setups for volatile market conditions
+   - AI analyzes liquidity level strength and sweep validity
 
-3. **Liquidity Sweeps** (45-55% WR, 1:3-1:5 R:R)
-   - Equal highs/lows swept with displacement
-   - Volatile markets, key level hunts
+2. **CANDLE_2_CLOSURE**
+   - Two consecutive candles closing in the same direction
+   - Combined with RSI extremes for reversal confirmation
+   - Trend reversal and oversold/overbought setups
+
+3. **BREAKOUT_RETEST**
+   - Breakout from key levels with subsequent retest
+   - Confirmation-based entries for trend continuation
+   - AI assesses breakout strength and retest quality
+
+**Note**: Strategy-specific prompts in `AiAnalysisService` provide tailored context analysis for each strategy type.
 
 ## Architecture
 
-**Stack**: Java 21, Spring Boot 3, AWS Lambda (SnapStart), DynamoDB, Claude AI
+**Technology Stack**:
+- Java 21 on AWS Lambda with SnapStart (~500ms cold start)
+- Spring Boot 3.2.1 + Spring Cloud Function (3 Lambda functions)
+- Spring AI 1.0.0-M4 with Claude API (claude-sonnet-4-5-20250929)
+- Amazon DynamoDB (On-Demand billing) with GSI queries
+- Binance Futures API for real-time market data
+- Telegram Bot for notifications
 
-**Pipeline**: Webhook → Validate → Market Data → AI Analysis → Rules → Journal → Telegram
+**9-Step Signal Processing Pipeline** (`SignalProcessingService`):
+1. **Market Context Building** - Fetch real-time data from Binance (price, OI, funding, volatility)
+2. **Intraday Context Engine** - Deterministic analysis of trend, OI behavior, volume
+3. **AI Setup Assessment** - Claude analyzes context → quality (A/B/C), risks, invalidation
+4. **Rule Validation** - Enforce 6 non-negotiable trading rules via `RuleEngineService`
+5. **Execution Planning** - AI generates entry zones, stops, targets (if rules pass)
+6. **Execution Advisory** - Pre-execution validation checklist
+7. **Signal Classification** - Determine TRADE/WATCH/BLOCKED status
+8. **Journal Entry** - Persist complete analysis to DynamoDB
+9. **Telegram Notification** - Send alert (TRADE signals only)
 
-## Trading Rules
+**Lambda Functions** (Spring Cloud Function beans):
+- `processWebhook` - POST /api/webhook/{proxy+}
+- `getJournalEntries` - GET /api/journal/{proxy+}
+- `getStatistics` - GET /api/journal/statistics
 
-1. **Sessions**: London/NY only (configurable)
-2. **Quality**: A/B setups only (C rejected)
-3. **Alignment**: HTF bias required
-4. **Volatility**: High volatility blocked
-5. **AI Role**: Context only, not decisions
+## Trading Rules (Non-Negotiable)
+
+The system enforces 6 strict trading rules via `RuleEngineService` with **NO override mechanism**:
+
+1. **Setup Quality**: Only A/B quality setups (C quality blocked by default)
+2. **HTF Alignment**: Higher timeframe bias alignment required for validation
+3. **Session Filtering**: London/NY sessions enabled, Asia disabled (configurable)
+4. **Daily Loss Limit**: Maximum 2R loss per day enforced
+5. **Open Interest Changes**: Must meet minimum threshold for validation
+6. **Volatility Control**: High volatility setups automatically blocked
+
+**Critical**: These rules are defined in `application.yml` and enforced by `RuleEngineService`. Failed rules = INVALID signal. AI provides context only—rules make the final decision.
 
 ## Configuration
 
@@ -83,27 +131,38 @@ trading:
 
 ### POST /api/webhook/tradingview
 
-Receive TradingView signals.
+Receive TradingView signals and process through the 9-step pipeline.
 
+**Request**:
 ```json
 {
   "symbol": "BTCUSDT",
+  "direction": "LONG",
+  "strategy": "LIQUIDITY_SWEEP",
+  "eventType": "ENTRY",
   "timeframe": "15",
-  "strategy": "Liquidity Sweeps",
-  "eventType": "reversal",
-  "direction": "bullish",
   "session": "London",
-  "price": {"close": 92100.50, "stopLoss": 91800.00},
+  "price": {
+    "close": 92100.50,
+    "stopLoss": 91800.00
+  },
   "context": {
     "htfBias": "bullish",
     "rsiValue": 28.5,
-    "atrValue": 150.25,
     "volumeSpike": true
   }
 }
 ```
 
-**Response**: `202 Accepted`
+**Response**:
+```json
+{
+  "success": true,
+  "status": "VALID",
+  "message": "Signal processed and journal entry created",
+  "symbol": "BTCUSDT"
+}
+```
 
 ### GET /api/journal
 
@@ -125,13 +184,20 @@ Get performance stats (win rate, PnL, quality breakdown).
 
 ## Telegram Notifications
 
+**Signal Classification**:
+- 🟢 **TRADE**: High-confidence setup (A/B quality), all rules passed, ready to execute
+- ⚠️ **WATCH**: Medium confidence, monitor for improvement (not sent by default)
+- 🔴 **BLOCKED**: Failed rule validation, do not trade (not sent by default)
+
+**Note**: Only TRADE signals trigger Telegram notifications to reduce noise.
+
 ### Market Context Explained
 - **Trends**: 🟢 bullish / 🔴 bearish / ⚪ neutral across 15m/5m/1m timeframes
 - **OI (Open Interest)**: Change % - positive = new positions opening, 🔥 >5% = strong activity
 - **Funding**: Rate % - positive = longs pay shorts, ⚠️ >0.1% = extreme positioning
 - **Volatility**: normal/expanding/contracting - affects stop placement
 
-### Valid Signal
+### TRADE Signal Example
 ```
 🟢 TRADE SETUP - 🟢 A QUALITY
 
@@ -157,9 +223,9 @@ Volatility: normal
 ✅ ACTION: READY TO TRADE
 ```
 
-### Invalid Signal
+### BLOCKED Signal Example
 ```
-🔴 SETUP REJECTED
+🔴 BLOCKED SIGNAL
 
 $BTC LONG
 Candle 2 Closure • reversal • Asia
@@ -204,11 +270,13 @@ curl -X POST <api-url> -H "X-API-Key: key" -d @test-payloads/example.json
 
 ## Performance
 
-- **Response Time**: 1-3 seconds (includes AI analysis)
-- **Cold Start**: ~500ms (SnapStart)
-- **Memory**: 2GB
-- **Timeout**: 30s
-- **Cost**: Free tier covers ~30k webhooks/month
+- **Response Time**: 1-3 seconds (includes AI analysis and market data fetching)
+- **Cold Start**: ~500ms with Lambda SnapStart (Java 21)
+- **Memory**: 2048MB Lambda allocation
+- **Timeout**: 30 seconds
+- **Binance API Cache**: 10-second TTL for market data (in-memory)
+- **Rate Limiting**: Automatic Binance API rate limit monitoring and backoff
+- **Cost**: AWS Free Tier covers ~1M Lambda requests/month; Claude API usage optimized with caching
 
 ## Project Structure
 
@@ -226,10 +294,15 @@ template.yaml        # AWS infrastructure
 
 ## Cost Optimization
 
-- **Smart Gating**: Skip AI for low-confidence signals (30-40% savings)
-- **Haiku Pre-filter**: Use cheaper model first (90% cheaper)
-- **Caching**: Reuse similar analyses (20-30% savings)
-- **Lambda Free Tier**: 1M requests/month
+The system includes multiple strategies to minimize Claude API costs:
+
+- **Smart Gating**: Skip AI analysis for signals below confidence threshold (default: 60) - saves 30-40%
+- **Haiku Pre-filter**: Use `claude-haiku-4-20250514` for initial screening (90% cheaper than Sonnet)
+- **AI Response Caching**: DynamoDB-based cache with TTL reuses similar market analyses - saves 20-30%
+- **Lambda SnapStart**: Reduces cold start time and compute costs
+- **DynamoDB On-Demand**: Pay only for actual read/write requests
+
+**Configuration**: All cost optimization features are configurable in `application.yml` under `ai.cost-optimization`
 
 ## License
 
