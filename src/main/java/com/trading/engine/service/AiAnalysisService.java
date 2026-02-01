@@ -100,10 +100,17 @@ public class AiAnalysisService {
         try {
             final var compactContext = buildCompactContext(context, webhook, intradayContext);
             final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
+            final var isReversal = webhook.getEventType() != null &&
+                (webhook.getEventType().equalsIgnoreCase("reversal") || webhook.getEventType().equalsIgnoreCase("sweep"));
+
+            final var reversalNote = isReversal ?
+                "\n\nIMPORTANT: This is a REVERSAL signal. Counter-trend setups are EXPECTED and valid. " +
+                "Do NOT penalize for HTF misalignment - reversals trade AGAINST the current trend. " +
+                "Focus on: RSI extremes, strong rejection candles, volume confirmation, and clear invalidation levels.\n" : "";
 
             final var userMessage = "Quick quality check for " + strategyContext.get("name") + " setup:\n" +
                     "Profile: " + strategyContext.get("profile") + "\n" +
-                    "Expected: " + strategyContext.get("expected") + "\n\n" +
+                    "Expected: " + strategyContext.get("expected") + reversalNote + "\n\n" +
                     "Assess if this setup meets minimum criteria. Respond with ONLY one letter:\n" +
                     "A = Excellent (all criteria met)\n" +
                     "B = Good (most criteria met, minor concerns)\n" +
@@ -119,7 +126,7 @@ public class AiAnalysisService {
             final var quality = response.trim().substring(0, 1).toUpperCase();
 
             if (List.of("A", "B", "C").contains(quality)) {
-                log.info("Haiku pre-filter result: Quality {}", quality);
+                log.info("Haiku pre-filter result: Quality {} (isReversal: {})", quality, isReversal);
                 return quality;
             }
 
@@ -139,11 +146,24 @@ public class AiAnalysisService {
         final var compactContext = buildCompactContext(context, webhook, intradayContext);
         final var strategyContext = getStrategyContextByName(webhook.getStrategy(), webhook.getEventType());
         final var outputConverter = new BeanOutputConverter<>(CombinedAiAnalysis.class);
+        final var isReversal = webhook.getEventType() != null &&
+            (webhook.getEventType().equalsIgnoreCase("reversal") || webhook.getEventType().equalsIgnoreCase("sweep"));
+
+        final var reversalGuidance = isReversal ?
+            "\n\nREVERSAL STRATEGY CONTEXT:\n" +
+            "This is a COUNTER-TREND reversal signal. HTF misalignment is EXPECTED and should NOT reduce quality.\n" +
+            "For reversals, focus on:\n" +
+            "- RSI extremes (<30 for longs, >70 for shorts) - strong reversal indicator\n" +
+            "- Strong rejection candle (high wick %, low body %)\n" +
+            "- Volume spike on reversal candle\n" +
+            "- Clear invalidation level (recent swing high/low)\n" +
+            "- OI behavior showing trapped traders (e.g., 'short_buildup' for a long reversal = shorts getting trapped)\n" +
+            "Quality A/B is appropriate if reversal criteria are met, even with HTF misalignment.\n" : "";
 
         final var userMessage = "Analyze " + strategyContext.get("name") + " setup and provide actionable guidance:\n\n" +
                 "PART 1 - SETUP ASSESSMENT:\n" +
                 "Profile: " + strategyContext.get("profile") + "\n" +
-                "Expected criteria: " + strategyContext.get("expected") + "\n" +
+                "Expected criteria: " + strategyContext.get("expected") + reversalGuidance + "\n" +
                 "Assess setup quality (A/B/C), identify risk factors, and invalidation conditions.\n\n" +
                 "PART 2 - EXECUTION PLAN (if quality is A or B):\n" +
                 "Target profile: " + strategyContext.get("profile") + "\n" +
@@ -306,8 +326,8 @@ public class AiAnalysisService {
         if (strategyLower.contains("candle") || strategyLower.contains("closure") || strategyLower.contains("rsi")) {
             return java.util.Map.of(
                 "name", "Candle 2 Closure with RSI",
-                "profile", "60-70% WR, 1:2-1:3 R:R, two-candle reversal pattern",
-                "expected", "RSI extreme (<30 or >70), two consecutive candles closing against trend, strong candle body (>60%), volume confirmation"
+                "profile", "60-70% WR, 1:2-1:3 R:R, counter-trend reversal pattern",
+                "expected", "RSI extreme (<30 for longs, >70 for shorts), two consecutive candles closing against trend, rejection wick (>40%), volume spike. NOTE: HTF misalignment is NORMAL for reversals - do not penalize."
             );
         }
 
@@ -334,8 +354,8 @@ public class AiAnalysisService {
         return switch (eventType.toLowerCase()) {
             case "reversal" -> java.util.Map.of(
                 "name", "Reversal Setup",
-                "profile", "45-55% WR, 1:3-1:5 R:R",
-                "expected", "Clear reversal signal, volume confirmation, defined invalidation"
+                "profile", "45-55% WR, 1:3-1:5 R:R, counter-trend trade",
+                "expected", "RSI extreme, strong rejection candle, volume spike, clear invalidation. HTF misalignment is EXPECTED for reversals - do not penalize."
             );
             case "continuation" -> java.util.Map.of(
                 "name", "Continuation Setup",

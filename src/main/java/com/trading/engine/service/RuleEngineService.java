@@ -16,7 +16,11 @@ public class RuleEngineService {
     private final TradingConfig tradingConfig;
 
     public RuleResult validateSetup(final MarketContext context, final AiAssessment aiAssessment) {
-        log.info("Validating setup for {} - Quality: {}", context.getSymbol(), aiAssessment.getSetupQuality());
+        return validateSetup(context, aiAssessment, null);
+    }
+
+    public RuleResult validateSetup(final MarketContext context, final AiAssessment aiAssessment, final String eventType) {
+        log.info("Validating setup for {} - Quality: {}, EventType: {}", context.getSymbol(), aiAssessment.getSetupQuality(), eventType);
 
         final var result = RuleResult.builder()
                 .passed(true)
@@ -24,7 +28,7 @@ public class RuleEngineService {
 
         validateSetupQuality(aiAssessment.getSetupQuality(), result);
 
-        validateHtfAlignment(context, result);
+        validateHtfAlignment(context, eventType, result);
 
         validateSession(context.getSession(), result);
 
@@ -55,17 +59,21 @@ public class RuleEngineService {
         }
     }
 
-    private void validateHtfAlignment(final MarketContext context, final RuleResult result) {
+    private void validateHtfAlignment(final MarketContext context, final String eventType, final RuleResult result) {
         if (!tradingConfig.isRequireHtfAlignment()) {
             result.addPassedRule("HTF alignment not required");
             return;
         }
 
         final var event = context.getLiquidityEvent().toLowerCase();
-        final var htfBias = context.getHtfBias().toLowerCase();
+        final var htfBias = context.getHtfBias() != null ? context.getHtfBias().toLowerCase() : "unknown";
 
         final var isLongEvent = event.contains("long") || event.contains("bullish");
         final var isShortEvent = event.contains("short") || event.contains("bearish");
+
+        // Check if this is a reversal event (these can trade counter-trend)
+        final var isReversalEvent = eventType != null &&
+            (eventType.equalsIgnoreCase("reversal") || eventType.equalsIgnoreCase("sweep"));
 
         var aligned = false;
         if (isLongEvent && htfBias.equals("bullish")) {
@@ -74,6 +82,13 @@ public class RuleEngineService {
             aligned = true;
         } else if (htfBias.equals("neutral")) {
             aligned = true;
+        }
+
+        // Allow counter-trend for reversal strategies if configured
+        if (!aligned && isReversalEvent && tradingConfig.isAllowReversalCounterTrend()) {
+            result.addPassedRule("Counter-trend reversal allowed - HTF: " + htfBias + ", Direction: " + event);
+            log.info("Allowing counter-trend reversal: HTF {} vs event {}", htfBias, event);
+            return;
         }
 
         if (aligned) {

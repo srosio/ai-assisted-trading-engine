@@ -82,8 +82,8 @@ public class SignalProcessingService {
             final var direction = mapDirectionToTradeDirection(webhook.getDirection());
             final var aiResult = performAiAnalysis(context, webhook, intradayContext, direction);
             
-            // Step 4: Rule validation
-            final var ruleResult = validateRules(context, aiResult.assessment);
+            // Step 4: Rule validation (pass eventType for reversal counter-trend handling)
+            final var ruleResult = validateRules(context, aiResult.assessment, webhook.getEventType());
             
             // Step 5: Execution advisory
             final var checklist = generateAdvisory(webhook.getSymbol(), context, intradayContext);
@@ -171,16 +171,16 @@ public class SignalProcessingService {
     /**
      * Step 4: Validate against trading rules
      */
-    private RuleResult validateRules(final MarketContext context, final AiAssessment assessment) {
-        log.debug("[Step 4] Validating trading rules");
-        final var ruleResult = ruleEngine.validateSetup(context, assessment);
-        
+    private RuleResult validateRules(final MarketContext context, final AiAssessment assessment, final String eventType) {
+        log.debug("[Step 4] Validating trading rules for eventType: {}", eventType);
+        final var ruleResult = ruleEngine.validateSetup(context, assessment, eventType);
+
         log.info("[Step 4] Rules: {} | Passed: {}/{}",
                 ruleResult.isPassed() ? "PASSED" : "FAILED",
                 ruleResult.getPassedRules() != null ? ruleResult.getPassedRules().size() : 0,
                 (ruleResult.getPassedRules() != null ? ruleResult.getPassedRules().size() : 0) +
                 (ruleResult.getFailedRules() != null ? ruleResult.getFailedRules().size() : 0));
-        
+
         return ruleResult;
     }
     
