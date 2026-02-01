@@ -86,6 +86,8 @@ trading:
 
   # Alignment
   require-htf-alignment: true
+  # Allow reversal strategies (Candle 2, Liquidity Sweep) to trade counter-trend
+  allow-reversal-counter-trend: true
 
   # Volatility
   block-high-volatility: true

@@ -27,6 +27,10 @@ public class TradingConfig {
     // HTF Alignment
     private boolean requireHtfAlignment = true;
 
+    // Allow counter-trend signals for reversal strategies (Candle 2, Liquidity Sweep)
+    // When true, reversal events can trade against HTF bias
+    private boolean allowReversalCounterTrend = true;
+
     // Volatility
     private boolean blockHighVolatility = true;
     private Double maxVolatilityThreshold = 2.5; // Multiple of average

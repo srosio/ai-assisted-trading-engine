@@ -28,7 +28,8 @@ rsiLen              = input.int(14, "RSI Length", group = FILTER_GROUP)
 // CHANGED: Defaults set to 30/70 for strict filtering
 rsiBuyLevel         = input.int(30, "Max RSI for Buy (<)", group = FILTER_GROUP, tooltip="Only Buy if RSI is below this (Oversold)")
 rsiSellLevel        = input.int(70, "Min RSI for Sell (>)", group = FILTER_GROUP, tooltip="Only Sell if RSI is above this (Overbought)")
-useHmaFilter        = input.bool(true, "Use HMA Trend (HTF Bias)?", group = FILTER_GROUP)
+// HMA is used for HTF bias REPORTING only - reversals trade AGAINST the trend
+useHmaFilter        = input.bool(false, "Require HMA Alignment? (disable for reversals)", group = FILTER_GROUP, tooltip="When OFF, signals fire regardless of HMA direction. HTF bias is still reported for context.")
 hmaLength           = input.int(55, "HMA Length", group = FILTER_GROUP)
 
 // --- Styling ---
@@ -102,6 +103,13 @@ get_bias() =>
 get_json(string _direction, string _eventType, float _price, float _sl, float _sweptLevel, string _htfBias) =>
     string _sess = get_session()
 
+    // Determine if this is a counter-trend reversal (direction opposite to HTF)
+    bool isCounterTrend = (_direction == "bullish" and _htfBias == "bearish") or (_direction == "bearish" and _htfBias == "bullish")
+
+    // Calculate RSI quality for reversals
+    bool rsiExtreme = (_direction == "bullish" and rsiValue < 35) or (_direction == "bearish" and rsiValue > 65)
+    string reversalQuality = rsiExtreme and wickPercent > 35 and volSpikeDetected ? "strong" : (rsiExtreme or wickPercent > 35 ? "moderate" : "weak")
+
     // Fixed: Added 'Z' to timestamp to indicate UTC properly for parsers
     string json =
       '{' +
@@ -118,9 +126,12 @@ get_json(string _direction, string _eventType, float _price, float _sl, float _s
       '"context": {' +
           '"sweptLevel": ' + (na(_sweptLevel) ? "null" : str.tostring(_sweptLevel)) + ', ' +
           '"htfBias": "' + _htfBias + '", ' +
+          '"isCounterTrend": ' + str.tostring(isCounterTrend) + ', ' +
+          '"reversalQuality": "' + reversalQuality + '", ' +
           '"displacement": true, ' +
           '"volumeSpike": ' + str.tostring(volSpikeDetected) + ', ' +
           '"rsiValue": ' + str.tostring(rsiValue) + ', ' +
+          '"rsiExtreme": ' + str.tostring(rsiExtreme) + ', ' +
           '"atrValue": ' + str.tostring(atrValue) + ', ' +
           '"previousDayHigh": ' + str.tostring(prevDayHigh) + ', ' +
           '"previousDayLow": ' + str.tostring(prevDayLow) + ', ' +
