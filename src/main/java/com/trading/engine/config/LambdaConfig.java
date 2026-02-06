@@ -5,6 +5,7 @@ import com.trading.engine.domain.TradingViewWebhook;
 import com.trading.engine.dto.JournalEntryResponse;
 import com.trading.engine.dto.JournalStatistics;
 import com.trading.engine.repository.JournalEntryRepository;
+import com.trading.engine.service.AutonomousScannerService;
 import com.trading.engine.service.IngressService;
 import com.trading.engine.service.SignalProcessingService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class LambdaConfig {
     private final IngressService ingressService;
     private final SignalProcessingService signalProcessor;
     private final JournalEntryRepository journalRepository;
+    private final AutonomousScannerService autonomousScanner;
 
     /**
      * Webhook Function: Receives TradingView webhook data
@@ -117,6 +119,48 @@ public class LambdaConfig {
             // Simplified: All time stats
             final var entries = journalRepository.findAll();
             return calculateStatistics(entries);
+        };
+    }
+
+    /**
+     * Autonomous Market Scanner Function
+     * Triggered by: EventBridge schedule (London/NY session opens) or POST /api/scan
+     * Scans all watchlist symbols, discovers setups via AI, validates, and notifies.
+     * This replaces the TradingView webhook dependency.
+     */
+    @Bean
+    public Function<Map<String, String>, Message<Map<String, Object>>> scanMarkets() {
+        return params -> {
+            log.info("Autonomous market scan triggered - params: {}", params);
+
+            final var startTime = System.currentTimeMillis();
+
+            try {
+                final var summary = autonomousScanner.runSessionScan();
+                final var duration = System.currentTimeMillis() - startTime;
+
+                log.info("Market scan complete in {}ms - Session: {}, Setups: {}, Tradeable: {}",
+                        duration, summary.getSession(), summary.getSetupsFound(), summary.getTradeableSetups());
+
+                return MessageBuilder.withPayload(Map.<String, Object>of(
+                        "success", true,
+                        "session", summary.getSession(),
+                        "totalScanned", summary.getTotalScanned(),
+                        "interestingSymbols", summary.getInterestingSymbols(),
+                        "setupsFound", summary.getSetupsFound(),
+                        "tradeableSetups", summary.getTradeableSetups(),
+                        "durationMs", duration,
+                        "message", summary.getMessage()
+                )).setHeader("statusCode", 200).build();
+
+            } catch (final Exception e) {
+                log.error("Market scan failed: {}", e.getMessage(), e);
+                return MessageBuilder.withPayload(Map.<String, Object>of(
+                        "success", false,
+                        "error", e.getMessage(),
+                        "durationMs", System.currentTimeMillis() - startTime
+                )).setHeader("statusCode", 500).build();
+            }
         };
     }
 
