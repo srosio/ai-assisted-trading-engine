@@ -6,7 +6,7 @@ Description: >
 
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 120  # Increased for autonomous scans (multiple symbols + AI calls)
     MemorySize: 2048  # 2 GB memory - good balance for Java Spring Boot
     Runtime: java21
     Architectures:
@@ -103,6 +103,28 @@ Resources:
           Properties:
             Path: /api/journal/statistics
             Method: GET
+        # Manual scan trigger (POST /api/scan)
+        ApiScan:
+          Type: HttpApi
+          Properties:
+            Path: /api/scan
+            Method: POST
+        # Autonomous scan: London session open (08:00 UTC, Mon-Fri)
+        ScanLondonOpen:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 8 ? * MON-FRI *)
+            Description: "Autonomous market scan at London session open"
+            Enabled: true
+            Input: '{"source": "aws.events", "session": "LONDON"}'
+        # Autonomous scan: NY session open (13:00 UTC, Mon-Fri)
+        ScanNyOpen:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 13 ? * MON-FRI *)
+            Description: "Autonomous market scan at NY session open"
+            Enabled: true
+            Input: '{"source": "aws.events", "session": "NY"}'
     Metadata:
       # Build method for SAM (if we used SAM CLI), but for raw AWS CLI we just point to the JAR built by Gradle
       BuildMethod: makefile

@@ -8,7 +8,7 @@ spring:
 
   cloud:
     function:
-      definition: processWebhook;getJournalEntries;getStatistics
+      definition: processWebhook;getJournalEntries;getStatistics;scanMarkets
 
 dynamodb:
   table-name: ${DYNAMODB_TABLE:journal_entries}
@@ -95,3 +95,44 @@ trading:
 
   # Open Interest
   min-oi-change-percent: 2.0
+
+# Autonomous Scanner Configuration
+# Replaces TradingView dependency - scans markets autonomously every session
+scanner:
+  enabled: ${SCANNER_ENABLED:true}
+
+  # Symbols to scan every session (Binance Futures pairs)
+  watchlist:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+    - BNBUSDT
+    - XRPUSDT
+    - DOGEUSDT
+    - ADAUSDT
+    - AVAXUSDT
+    - LINKUSDT
+    - DOTUSDT
+
+  # Session schedule (UTC hours)
+  london-open-hour: 8
+  ny-open-hour: 13
+
+  # Pre-screening thresholds (filter before AI to save costs)
+  min-oi-change-for-screen: 1.5        # Min absolute OI change % to be "interesting"
+  min-volume-ratio-for-screen: 1.2     # Volume vs avg ratio
+  key-level-proximity-percent: 1.0     # % distance from key level to flag
+
+  # AI cost control
+  max-symbols-per-scan: 5              # Max symbols sent to AI per scan
+  max-tokens-for-discovery: 2048       # More tokens for setup discovery
+
+  # Notification behavior
+  send-session-summary: true           # Send Telegram summary after each scan
+  only-send-tradeable-signals: false   # If true, only notify TRADE signals (not WATCH)
+
+  # Timeframes to analyze
+  timeframes:
+    - 15m
+    - 1h
+    - 4h

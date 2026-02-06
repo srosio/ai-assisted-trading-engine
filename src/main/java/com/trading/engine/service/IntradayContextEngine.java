@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Service
 @RequiredArgsConstructor
@@ -97,7 +98,7 @@ public class IntradayContextEngine {
             return "neutral";
         }
 
-        final var pricePosition = price.subtract(dayLow).divide(range, 2, BigDecimal.ROUND_HALF_UP);
+        final var pricePosition = price.subtract(dayLow).divide(range, 2, RoundingMode.HALF_UP);
 
         if (pricePosition.compareTo(new BigDecimal("0.7")) > 0 && "bullish".equals(htfBias)) {
             return "bullish";
@@ -118,7 +119,7 @@ public class IntradayContextEngine {
             return "neutral";
         }
 
-        final var midpoint = prevHigh.add(prevLow).divide(new BigDecimal("2"), 2, BigDecimal.ROUND_HALF_UP);
+        final var midpoint = prevHigh.add(prevLow).divide(new BigDecimal("2"), 2, RoundingMode.HALF_UP);
         final var priceRising = currentPrice.compareTo(midpoint) > 0;
 
         if (oiChange > 2.0 && priceRising) {

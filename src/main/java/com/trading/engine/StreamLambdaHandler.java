@@ -41,8 +41,19 @@ public class StreamLambdaHandler implements RequestStreamHandler {
             // Parse the API Gateway event
             JsonNode eventNode = objectMapper.readTree(inputBytes);
 
+            // Check if this is an EventBridge scheduled event (autonomous scanner trigger)
+            if (eventNode.has("source") && eventNode.get("source").asText().startsWith("aws.")) {
+                log.info("EventBridge scheduled event detected - routing to scanMarkets");
+                // Wrap in API Gateway-like format for FunctionInvoker
+                ObjectNode wrappedEvent = objectMapper.createObjectNode();
+                ObjectNode headers = objectMapper.createObjectNode();
+                headers.put("spring.cloud.function.definition", "scanMarkets");
+                wrappedEvent.set("headers", headers);
+                wrappedEvent.put("body", "{}");
+                inputBytes = objectMapper.writeValueAsBytes(wrappedEvent);
+            }
             // Check if this is API Gateway v2.0 format and extract routeKey
-            if (eventNode.has("version") && "2.0".equals(eventNode.get("version").asText())) {
+            else if (eventNode.has("version") && "2.0".equals(eventNode.get("version").asText())) {
                 String routeKey = eventNode.has("routeKey") ? eventNode.get("routeKey").asText() : null;
 
                 if (routeKey != null) {
@@ -56,9 +67,9 @@ public class StreamLambdaHandler implements RequestStreamHandler {
                     if (eventNode.has("headers")) {
                         ((ObjectNode) eventNode.get("headers")).put("spring.cloud.function.definition", functionName);
                     } else {
-                        ObjectNode headers = objectMapper.createObjectNode();
-                        headers.put("spring.cloud.function.definition", functionName);
-                        ((ObjectNode) eventNode).set("headers", headers);
+                        ObjectNode newHeaders = objectMapper.createObjectNode();
+                        newHeaders.put("spring.cloud.function.definition", functionName);
+                        ((ObjectNode) eventNode).set("headers", newHeaders);
                     }
 
                     // Convert back to input stream with modified event
@@ -86,6 +97,7 @@ public class StreamLambdaHandler implements RequestStreamHandler {
             case "POST /api/webhook/tradingview" -> "processWebhook";
             case "GET /api/journal/statistics" -> "getStatistics";
             case "GET /api/journal" -> "getJournalEntries";
+            case "POST /api/scan", "POST /api/scan/markets" -> "scanMarkets";
             default -> {
                 log.warn("Unknown routeKey: {}. Defaulting to processWebhook", routeKey);
                 yield "processWebhook";
