@@ -6,7 +6,7 @@ Description: >
 
 Globals:
   Function:
-    Timeout: 120  # Increased for autonomous scans (multiple symbols + AI calls)
+    Timeout: 30
     MemorySize: 2048  # 2 GB memory - good balance for Java Spring Boot
     Runtime: java21
     Architectures:
@@ -80,6 +80,7 @@ Resources:
       FunctionName: ai-trading-engine
       CodeUri: build/libs/ai-assisted-trading-engine-1.0.0.jar
       Handler: com.trading.engine.StreamLambdaHandler
+      Timeout: 120  # Override global 30s - needed for autonomous scans (EventBridge triggers)
       SnapStart:
         ApplyOn: PublishedVersions
       Policies:
@@ -113,18 +114,18 @@ Resources:
         ScanLondonOpen:
           Type: Schedule
           Properties:
-            Schedule: cron(0 8 ? * MON-FRI *)
+            Schedule: "cron(0 8 ? * MON-FRI *)"
+            Name: trading-engine-scan-london
             Description: "Autonomous market scan at London session open"
-            Enabled: true
-            Input: '{"source": "aws.events", "session": "LONDON"}'
+            Input: "{\"source\":\"aws.events\",\"session\":\"LONDON\"}"
         # Autonomous scan: NY session open (13:00 UTC, Mon-Fri)
         ScanNyOpen:
           Type: Schedule
           Properties:
-            Schedule: cron(0 13 ? * MON-FRI *)
+            Schedule: "cron(0 13 ? * MON-FRI *)"
+            Name: trading-engine-scan-ny
             Description: "Autonomous market scan at NY session open"
-            Enabled: true
-            Input: '{"source": "aws.events", "session": "NY"}'
+            Input: "{\"source\":\"aws.events\",\"session\":\"NY\"}"
     Metadata:
       # Build method for SAM (if we used SAM CLI), but for raw AWS CLI we just point to the JAR built by Gradle
       BuildMethod: makefile
